@@ -1,0 +1,26 @@
+{
+  "manhunt1_nx": {
+    "commit": "c1374107df26adc69d6b6bc122480bd24211fc61",
+    "commit_date": "2026-11-16T20:34:28-03:00",
+    "origin": "git@github.com:baezahuertaelias/manhunt1_nx.git",
+    "tracked_changes": []
+  },
+  "nfsu1-sw": {
+    "commit": "d597e08f88e3f415eb44366b22e75054f2dfd15d",
+    "commit_date": "2026-10-15T18:23:20Z",
+    "origin": "https://github.com/antoxa2584x/nfsu1-sw",
+    "tracked_changes": []
+  },
+  "nfsu2-sw": {
+    "commit": "d3bbc3094f8e1ad3b34593eabd431f7d251b14cb",
+    "commit_date": "2026-10-18T03:12:48+03:00",
+    "origin": "https://github.com/antoxa2584x/nfsu2-sw",
+    "tracked_changes": []
+  },
+  "BLACK-NX-PORT": {
+    "commit": "d7611d14f89179cbbf8113edee0f52b2b5f52bf5",
+    "commit_date": "2026-11-13T13:07:19-03:00",
+    "origin": "https://github.com/gerisson1996/BLACK-NX-PORT",
+    "tracked_changes": []
+  }
+}

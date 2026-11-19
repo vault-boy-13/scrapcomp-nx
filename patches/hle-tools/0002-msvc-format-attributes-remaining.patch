@@ -1,0 +1,35 @@
+diff --git a/tools/recomp/codegen_emit.cpp b/tools/recomp/codegen_emit.cpp
+--- a/tools/recomp/codegen_emit.cpp
++++ b/tools/recomp/codegen_emit.cpp
+@@ -9,7 +9,9 @@
+ 
+ namespace fs = std::filesystem;
+ 
++#if defined(__GNUC__) || defined(__clang__)
+ static std::string F(const char* f, ...) __attribute__((format(printf, 1, 2)));
++#endif
+ static std::string F(const char* f, ...) {
+     char buf[1024];
+     va_list ap;
+diff --git a/tools/recomp/codegen_fp.cpp b/tools/recomp/codegen_fp.cpp
+--- a/tools/recomp/codegen_fp.cpp
++++ b/tools/recomp/codegen_fp.cpp
+@@ -4,5 +4,7 @@
+ #include "codegen.h"
+ 
++#if defined(__GNUC__) || defined(__clang__)
+ static std::string F(const char* f, ...) __attribute__((format(printf, 1, 2)));
++#endif
+ static std::string F(const char* f, ...) {
+     char buf[2048];
+diff --git a/tools/recomp/codegen_int.cpp b/tools/recomp/codegen_int.cpp
+--- a/tools/recomp/codegen_int.cpp
++++ b/tools/recomp/codegen_int.cpp
+@@ -5,5 +5,7 @@
+ #include "codegen.h"
+ 
++#if defined(__GNUC__) || defined(__clang__)
+ static std::string F(const char* f, ...) __attribute__((format(printf, 1, 2)));
++#endif
+ static std::string F(const char* f, ...) {
+     char buf[2048];

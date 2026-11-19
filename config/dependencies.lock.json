@@ -1,0 +1,86 @@
+{
+  "source_trees_after_patches": {
+    "xboxrecomp": {
+      "identity": {
+        "reference": "nfsu2-sw",
+        "commit": "d3bbc3094f8e1ad3b34593eabd431f7d251b14cb",
+        "prefix": "xboxrecomp"
+      },
+      "tree_sha256": "17ebaed2ad0a081292180d9fc043815f18c9be1a42f9745685708563630fe90b",
+      "file_count": 445
+    },
+    "XboxXBE-Recomp": {
+      "identity": {
+        "reference": "BLACK-NX-PORT",
+        "commit": "d7611d14f89179cbbf8113edee0f52b2b5f52bf5",
+        "prefix": "XboxXBE-Recomp"
+      },
+      "tree_sha256": "737627617ca6e2021b28ed1570b4a5b87d7bf63c129dd8df728fb32ea162c185",
+      "file_count": 101
+    },
+    "tomlplusplus": {
+      "identity": {
+        "reference": "BLACK-NX-PORT",
+        "commit": "d7611d14f89179cbbf8113edee0f52b2b5f52bf5",
+        "prefix": "third_party/tomlplusplus"
+      },
+      "tree_sha256": "24d6702a1c91c459d9bc5db744c2709ca4c3318b7360011f8158e36e8dbf8f8c",
+      "file_count": 213
+    }
+  },
+  "zydis": {
+    "repository": "https://github.com/zyantific/zydis.git",
+    "commit": "a2278f1d254e492f6a6b39f6cb5d1f5d515659dc",
+    "zycore_commit": "0b2432ced0884fd152b471d97ecf0258ff4d859f"
+  },
+  "python_requirements_sha256": "233d17c23c47d090863c07a6c94e1df4823709f5a0d14d3ce4bce054d916e992",
+  "patches": {
+    "patches/hle-tools/0001-msvc-format-attribute.patch": "af23eaef1514235a1d17230fc3c7d76e68f2e2e5a01b14fb4f34609975a33c01",
+    "patches/hle-tools/0002-msvc-format-attributes-remaining.patch": "828a43e1a82d607f9a4016cfde3aa3fcb7d2e6ece2c71a171cde10eac23b5efc",
+    "patches/runtime/0001-native-windows-executor-portability.patch": "4b60b99eacb2922a46b1558e92b820adb15de23bf1c3c84867def81d1d6f9cc9"
+  },
+  "devkit_packages": "devkitA64 r30-1\nlibnx 4.12.0-1\ndeko3d 0.5.0-1\nuam 1.1.0-2\nswitch-mesa 20.1.0-5\nswitch-sdl2 2.28.5-4\nswitch-cmake 1.5.2-1",
+  "tool_binaries": {
+    "host_compiler": {
+      "path": "cl.exe",
+      "sha256": "b0a1818ebae6da7f18230a84e76ce839212584ac4c2ab55b97a0d5268085da57"
+    },
+    "native_cmake": {
+      "path": "cmake.exe",
+      "sha256": "8e30b660920a328bcc62c4b6de1b86f0de7a178aca8ec5dbb6924fd05b4eb683"
+    },
+    "native_ninja": {
+      "path": "ninja.exe",
+      "sha256": "4a641b1a404e390cf869b79782fecea9bc6cd9e5d2e0f97163cf4582c93bc843"
+    },
+    "aarch64_gcc": {
+      "path": "aarch64-none-elf-gcc.exe",
+      "sha256": "6a73fa830c14f714cf0dd3ff82c63be64fd03b6e25071792eb54292693efd5d5"
+    },
+    "uam": {
+      "path": "uam.exe",
+      "sha256": "15f29d489fce66f020b4b3189edc4e06ecb044baf86ca782746f48cee8ed0357"
+    },
+    "libnx": {
+      "path": "libnx.a",
+      "sha256": "12a59cdfdceab83e39ee129b0275dd803e393e83f19de3922a3b6cc95c767edd"
+    },
+    "deko3d": {
+      "path": "libdeko3d.a",
+      "sha256": "bd99b3771ba5cad2900cf82137479a641f92d5c643a1537fd73c46499811cbe5"
+    },
+    "ryubing": {
+      "path": "emu/Ryubing/Ryujinx.exe",
+      "sha256": "cc8826b9ed4a72299c4db48fae077f5a3e659bb03671b7c40cb094d8e727cde0"
+    }
+  },
+  "renderdoc": {
+    "version": "1.47",
+    "url": "https://renderdoc.org/stable/1.47/RenderDoc_1.47_64.zip",
+    "archive_sha256": "b51712e58d40066b34ca30c7869d15f72e4b5c001b2d92232f6783a636d5a3c1",
+    "executables": [
+      ".deps\\RenderDoc_1.47_64\\renderdoccmd.exe",
+      ".deps\\RenderDoc_1.47_64\\x86\\renderdoccmd.exe"
+    ]
+  }
+}

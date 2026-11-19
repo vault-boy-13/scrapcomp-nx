@@ -1,0 +1,54 @@
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -427,7 +427,12 @@
+ static uint32_t s_reg[0x2000 / 4];
+ /* 64-byte blocks of s_reg changed since a queueing back end last looked
+  * (nv2a_pb_reg_dirty); starts all set. */
+-static uint8_t s_reg_dirty[0x2000 / 64] = { [0 ... 0x2000 / 64 - 1] = 1 };
++#define PB_DIRTY16 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
++static uint8_t s_reg_dirty[0x2000 / 64] = {
++    PB_DIRTY16, PB_DIRTY16, PB_DIRTY16, PB_DIRTY16,
++    PB_DIRTY16, PB_DIRTY16, PB_DIRTY16, PB_DIRTY16
++};
++#undef PB_DIRTY16
+ uint8_t *nv2a_pb_reg_dirty(void) { return s_reg_dirty; }
+ static float reg_f(uint32_t method) { float f; memcpy(&f, &s_reg[method / 4], 4); return f; }
+ 
+@@ -3095,6 +3100,19 @@
+     s_cull.prev_valid = 1;
+ }
+ 
++static void pb_monotonic_time(struct timespec *result)
++{
++#ifdef _WIN32
++    LARGE_INTEGER ticks, frequency;
++    QueryPerformanceCounter(&ticks);
++    QueryPerformanceFrequency(&frequency);
++    result->tv_sec = (time_t)(ticks.QuadPart / frequency.QuadPart);
++    result->tv_nsec = (long)((ticks.QuadPart % frequency.QuadPart) * 1000000000ll / frequency.QuadPart);
++#else
++    clock_gettime(CLOCK_MONOTONIC, result);
++#endif
++}
++
+ /* 1: drop the batch. lo/nv: the gathered vertex range. */
+ static int cull_batch(uint32_t lo, uint32_t nv)
+ {
+@@ -3116,7 +3134,7 @@
+         return 0;
+     {
+         struct timespec t0, t1;
+-        if (s_cull.stats) clock_gettime(CLOCK_MONOTONIC, &t0);
++        if (s_cull.stats) pb_monotonic_time(&t0);
+         vp = 0;
+         if (s_gpu.prim < 5 || s_gpu.prim > 10 || !s_gpu.clip_w || !s_gpu.clip_h)
+             off = 0;                                /* points and lines have size */
+@@ -3125,7 +3143,7 @@
+         else
+             off = 0;                                /* pre-transformed */
+         if (s_cull.stats) {
+-            clock_gettime(CLOCK_MONOTONIC, &t1);
++            pb_monotonic_time(&t1);
+             s_cull.ns += (uint64_t)((t1.tv_sec - t0.tv_sec) * 1000000000ll + (t1.tv_nsec - t0.tv_nsec));
+             s_cull.verts += nv;
+         }

@@ -1,0 +1,9 @@
+{
+  "version": "1.47",
+  "url": "https://renderdoc.org/stable/1.47/RenderDoc_1.47_64.zip",
+  "archive_sha256": "b51712e58d40066b34ca30c7869d15f72e4b5c001b2d92232f6783a636d5a3c1",
+  "executables": [
+    ".deps\\RenderDoc_1.47_64\\renderdoccmd.exe",
+    ".deps\\RenderDoc_1.47_64\\x86\\renderdoccmd.exe"
+  ]
+}

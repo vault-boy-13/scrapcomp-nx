@@ -1,0 +1,10 @@
+{
+  "path": "original/Default.xbe",
+  "sha256": "14ecbbcf23613a916a5b3c8c45eb3448aee7693763a6dd1c70a3cb5493aefb3c",
+  "title_id": "0x454C0001",
+  "entry_point": "0x00187775",
+  "code_sections": [".text", "D3D", "D3DX", "XGRPH", "DSOUND", "WMADEC", "XMV", "XPP"],
+  "excluded_pending_classification": ["DOLBY", ".bss_ste"],
+  "mmio_sections": ["DSOUND", "XPP"],
+  "note": "Static starting configuration. DOLBY classification and actual device access coverage remain to be established."
+}

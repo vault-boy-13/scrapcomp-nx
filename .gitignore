@@ -1,0 +1,35 @@
+# Local extracted disc and external reference checkouts.
+/original/
+/Scrapland/
+/references/
+/emu/
+/.venv/
+/.deps/
+/runtime/xboxrecomp/
+/config/workspace.local.json
+# Machine-specific and game-derived audit/run reports stay local.
+/reports/
+# Local credentials and editor state.
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.pem
+*.p12
+*.pfx
+prod.keys
+title.keys
+# Local Codex instructions, skills and their supporting references.
+/AGENTS.md
+/.agents/
+# Generated sources, captures and builds stay local.
+/build/
+/generated/
+/artifacts/
+/runs/
+/.cache/
+/switch_sd/
+__pycache__/
+.pytest_cache/
+*.pyc

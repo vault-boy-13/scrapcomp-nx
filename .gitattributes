@@ -1,0 +1,2 @@
+# Keep scripts, patches and hash-pinned text identical across Windows/Linux.
+* text=auto eol=lf

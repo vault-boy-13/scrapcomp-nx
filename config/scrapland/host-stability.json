@@ -1,0 +1,15 @@
+{
+  "scope": "Bounded native-host first-scene route; inspect actual captures after requested resumes. Not full-game or Switch validation.",
+  "run": {
+    "seconds": 600,
+    "sample_at": 530,
+    "pad_script": "15000:start:200,30000:start:200,45000:start:200,60000:start:200,70000:start:200,85000:a:200,105000:a:200,130000:a:200,155000:a:200,175000:a:200,195000:a:200,205000:lsup:3000,220000:rsright:3000,235000:lsleft:3000,260000:start:600,270000:a:800,320000:lsup:1500,335000:rsleft:1500,350000:lsdown:1500,365000:rsright:1500,380000:start:600,385000:a:800,420000:lsleft:1500,435000:rsright:1500,450000:lsright:1500,465000:rsleft:1500,480000:start:600,485000:a:800,520000:lsup:1500,535000:lsdown:1500,550000:rsright:1500,565000:rsleft:1500",
+    "dump_every": 600,
+    "quiet_gpu": true,
+    "profile": true,
+    "gpu_sync": "deferred",
+    "audio_capture": "190,20",
+    "audio_stream": 900,
+    "dsp_dma_period": 15
+  }
+}

@@ -1,0 +1,31 @@
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -425,7 +425,7 @@
+     # pushfd READS the flags and leaves them alone, so it belongs here.
+     # popfd does NOT -- see _FLAGS_UNDEFINED.
+     "pushfd", "pushal", "popal",
+-    "sgdt", "ljmp", "sfence",
++    "sgdt", "ljmp", "sfence", "wbinvd",
+     # SSE scalar float
+     "movss", "movsd",
+     "addss", "subss", "mulss", "divss",
+@@ -1677,6 +1677,9 @@
+         # Cache hints and store fences: nothing to model on a single-threaded
+         # interpreter over coherent host memory. Named so they stop showing up
+         # in the unimplemented report as if they were missing work.
++        if m == "wbinvd":
++            return ["recomp_cache_writeback_invalidate(); /* coherent guest RAM */"]
++
+         if m.startswith("prefetch") or m in ("sfence", "lfence", "mfence"):
+             return [f"(void)0; /* {m}: cache/ordering hint, nothing to model */"]
+ 
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -77,6 +77,7 @@
+  * emits nothing for it; lifting it to __debugbreak() terminated the process
+  * with STATUS_BREAKPOINT the first time a title tried to print. */
+ void recomp_debug_service(uint32_t service, uint32_t arg_va);
++void recomp_cache_writeback_invalidate(void);
+ 
+ /* MSVC's __debugbreak() intrinsic -> gcc/clang equivalent.
+  * The auto-generated code emits __debugbreak for x86 INT 3 instructions.

@@ -1,0 +1,176 @@
+--- a/src/kernel/kernel_memory.c
++++ b/src/kernel/kernel_memory.c
+@@ -167,8 +167,11 @@
+ {
+     /*
+      * The contiguous arena is the virtual window onto physical RAM, so an
+-     * address inside it is its physical offset plus XBOX_CONTIG_BASE. Anything
+-     * outside passes through unchanged.
++     * address inside it translates to its physical offset. Ordinary guest
++     * pages get stable, separately reserved physical aliases: their numerical
++     * VAs can overlap offsets owned by unrelated contiguous allocations.
++     * Device models consult the shared page registry before resolving a bus
++     * address through the contiguous window. No sample data is copied.
+      *
+      * The only implementation. bridge_MmGetPhysicalAddress calls this rather
+      * than repeating the arithmetic: the two used to disagree, with the bridge
+@@ -178,7 +181,10 @@
+      * with bit 31 set, and the corruption surfaces as wrong geometry with
+      * nothing naming this function.
+      */
++    extern uint32_t xbox_DmaPhysicalForVirtual(uint32_t va);
+     uint32_t va = (uint32_t)(uintptr_t)BaseAddress;
++    if(va>=0x10000u && va<XBOX_CONTIG_BASE)
++        return xbox_DmaPhysicalForVirtual(va);
+     return (ULONG_PTR)((va >= XBOX_CONTIG_BASE &&
+                         (uint64_t)va < (uint64_t)XBOX_CONTIG_BASE + XBOX_CONTIG_SIZE)
+                      ? va - XBOX_CONTIG_BASE : va);
+--- a/src/kernel/xbox_devbus.c
++++ b/src/kernel/xbox_devbus.c
+@@ -30,6 +30,51 @@
+ int xbox_ContiguousIsPhysical(uint32_t phys)
+ {
+     return phys >= g_contig_phys_lo && phys < g_contig_phys_hi;
++}
++
++/* A low guest VA and a contiguous allocation can have the same numerical
++ * physical offset while occupying different native storage. MmGetPhysicalAddress
++ * therefore reserves distinct physical pages for non-contiguous guest pages.
++ * Devices resolve those aliases here, before the contiguous-window heuristic.
++ * Mappings are stable for the process lifetime; publication is atomic. */
++#define XBOX_DMA_PHYSICAL_PAGES (0x04000000u / 4096u)
++static volatile LONG g_bus_page_va[XBOX_DMA_PHYSICAL_PAGES];
++#define XBOX_DMA_VIRTUAL_SLOTS (XBOX_DMA_PHYSICAL_PAGES*2)
++static volatile LONGLONG g_bus_va_map[XBOX_DMA_VIRTUAL_SLOTS];
++
++uint32_t xbox_BusMappedVirtual(uint32_t physical)
++{
++    if(physical>=0x04000000u) return 0;
++    uint32_t va=(uint32_t)InterlockedCompareExchange(&g_bus_page_va[physical/4096],0,0);
++    return va?va+(physical&4095u):0;
++}
++
++uint32_t xbox_BusMappedPhysical(uint32_t virtual_address)
++{
++    uint32_t page=virtual_address&~4095u;
++    uint32_t at=((page>>12)*2654435761u)&(XBOX_DMA_VIRTUAL_SLOTS-1);
++    for(uint32_t i=0;i<XBOX_DMA_VIRTUAL_SLOTS;++i) {
++        uint64_t entry=(uint64_t)InterlockedCompareExchange64(&g_bus_va_map[(at+i)&(XBOX_DMA_VIRTUAL_SLOTS-1)],0,0);
++        if(!entry) return 0;
++        if((uint32_t)(entry>>32)==page) return (uint32_t)entry+(virtual_address&4095u);
++    }
++    return 0;
++}
++
++void xbox_BusRegisterPage(uint32_t physical,uint32_t virtual_page)
++{
++    if(physical>=0x04000000u || (physical&4095u) || !virtual_page || (virtual_page&4095u)) abort();
++    LONG previous=InterlockedCompareExchange(&g_bus_page_va[physical/4096],(LONG)virtual_page,0);
++    if(previous && (uint32_t)previous!=virtual_page) abort();
++    uint32_t at=((virtual_page>>12)*2654435761u)&(XBOX_DMA_VIRTUAL_SLOTS-1);
++    uint64_t entry=((uint64_t)virtual_page<<32)|physical;
++    for(uint32_t i=0;i<XBOX_DMA_VIRTUAL_SLOTS;++i) {
++        uint64_t previous=(uint64_t)InterlockedCompareExchange64(
++            &g_bus_va_map[(at+i)&(XBOX_DMA_VIRTUAL_SLOTS-1)],(LONGLONG)entry,0);
++        if(!previous || previous==entry) return;
++        if((uint32_t)(previous>>32)==virtual_page) abort();
++    }
++    abort();
+ }
+ 
+ /* Device interrupt lines, level-triggered, one bit per vector.
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -1731,6 +1731,19 @@
+     fprintf(stderr, "[WATCH] [%08X] %08X -> %08X  (esp=%08X)\n",
+             g_watch_va, g_watch_last, now, esp);
+     g_watch_last = now;
++
++#ifdef _WIN32
++    /* Device/native workers have no guest stack. Keep their actual writer
++     * chain too: a cleared DMA buffer can otherwise look like a guest write. */
++    if (!esp) {
++        void *frames[16];
++        unsigned count = CaptureStackBackTrace(0, 16, frames, NULL);
++        uintptr_t image = (uintptr_t)GetModuleHandleW(NULL);
++        for (unsigned k = 0; k < count; ++k)
++            fprintf(stderr, "         native[%u] rva=%llX\n", k,
++                    (unsigned long long)((uintptr_t)frames[k] - image));
++    }
++#endif
+ 
+     /* Return addresses the recompiled code pushed, innermost first. Values
+      * that merely look like code get printed too -- the chain is a lead, not
+@@ -3496,6 +3509,34 @@
+ static int g_contig_count;
+ static SRWLOCK g_contig_lock = SRWLOCK_INIT;
+ 
++/* Serialize lookup/reservation so concurrent MmGetPhysicalAddress callers
++ * receive one stable bus page for each low virtual page. Reserved pages are
++ * held for this process lifetime, just like the guest's mapped heap arena. */
++static SRWLOCK g_dma_page_lock = SRWLOCK_INIT;
++extern uint32_t xbox_BusMappedPhysical(uint32_t virtual_address);
++extern void xbox_BusRegisterPage(uint32_t physical,uint32_t virtual_page);
++
++uint32_t xbox_DmaPhysicalForVirtual(uint32_t va)
++{
++    /* The image lies below the contiguous arena by construction. Its bus
++     * offsets are already unambiguous; preserve those existing identities. */
++    if(g_xbox_image_hi && va<((g_xbox_image_hi+0xFFFFu)&~0xFFFFu)) return va;
++    AcquireSRWLockExclusive(&g_dma_page_lock);
++    uint32_t physical=xbox_BusMappedPhysical(va);
++    if(!physical) {
++        uint32_t reserved=xbox_ContiguousAlloc(4096,4096);
++        if(!reserved || reserved-XBOX_CONTIG_BASE>=0x04000000u) {
++            fprintf(stderr,"[DMA] no physical page for guest VA %08X\n",va);
++            abort();
++        }
++        physical=reserved-XBOX_CONTIG_BASE;
++        xbox_BusRegisterPage(physical,va&~4095u);
++        physical+=va&4095u;
++    }
++    ReleaseSRWLockExclusive(&g_dma_page_lock);
++    return physical;
++}
++
+ static int contig_insert(int at, uint32_t addr, uint32_t size, int is_free)
+ {
+     if (g_contig_count >= XBOX_CONTIG_MAX_BLOCKS)
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -103,6 +103,9 @@
+ static uint32_t dma_resolve(uint32_t offset)
+ {
+     extern int xbox_ContiguousIsPhysical(uint32_t phys);
++    extern uint32_t xbox_BusMappedVirtual(uint32_t phys);
++    uint32_t mapped=xbox_BusMappedVirtual(offset);
++    if(mapped) return mapped;
+ 
+     /* Did this runtime hand the offset out as contiguous memory? Then the
+      * bytes live in the window, and that is not a guess: the arena is a bump
+--- a/src/apu/apu_shim.h
++++ b/src/apu/apu_shim.h
+@@ -103,8 +103,11 @@
+  * streams played whatever else lived there. Same rule as the GPU's
+  * dma_resolve. */
+ extern int xbox_ContiguousIsPhysical(uint32_t phys);
++extern uint32_t xbox_BusMappedVirtual(uint32_t phys);
+ static inline uint8_t *apu_phys(hwaddr addr) {
+     uint32_t p = (uint32_t)addr & 0x03FFFFFF;
++    uint32_t mapped=xbox_BusMappedVirtual(p);
++    if(mapped) return g_apu_ram_ptr+mapped;
+     return g_apu_ram_ptr + (xbox_ContiguousIsPhysical(p) ? 0x80000000u + p : p);
+ }
+ 
+--- a/src/usb/ohci.c
++++ b/src/usb/ohci.c
+@@ -484,6 +484,9 @@
+ 
+ static uint32_t bus_to_va(uint32_t bus)
+ {
++    extern uint32_t xbox_BusMappedVirtual(uint32_t phys);
++    uint32_t mapped=xbox_BusMappedVirtual(bus);
++    if(mapped) return mapped;
+     if (bus && xbox_ContiguousIsPhysical(bus))
+         return OHCI_CONTIG_BASE + bus;
+     /* Below the XBE base (0x10000) nothing is RAM a driver could DMA into as

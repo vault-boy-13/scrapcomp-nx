@@ -1,0 +1,198 @@
+--- a/src/nv2a_gl/nv2a_gl.c
++++ b/src/nv2a_gl/nv2a_gl.c
+@@ -37,6 +37,7 @@
+ #include "gl_api.h"
+ #include "gl_psh.h"
+ #include "gl_vsh.h"
++#include "gl_lighting.h"
+ #include "../kernel/nv2a_backend.h"
+ 
+ #include <SDL.h>
+@@ -809,6 +810,9 @@
+     uint32_t   hash;            /* bucket of (vkey, pkey) */
+     int        next;            /* chain in s_prog_head, index + 1 */
+     float      vpc[192][4];
++    GLint      u_ffp;
++    int        ffp_valid;
++    float      ffp[NV2A_FFP_ROWS][4];
+     int        uni_valid;       /* uni holds the rest of its uniforms */
+     struct GlUni {
+         float surf[4], aa[2], m[16], vpoff[4], tscale[4][2];
+@@ -1037,6 +1041,7 @@
+         vs[nvs++] = vbody;
+         vs[nvs++] = nv2a_gl_vsh_main_program();
+     } else {
++        vs[nvs++] = nv2a_gl_vsh_lighting();
+         vs[nvs++] = nv2a_gl_vsh_fixed();
+     }
+     if (nv2a_gl_psh(pk, fsrc, sizeof fsrc) < 0)
+@@ -1090,6 +1095,7 @@
+     p->u_fc1 = glGetUniformLocation(p->prog, "u_fc1");
+     p->u_afunc = glGetUniformLocation(p->prog, "u_alpha_func");
+     p->u_aref = glGetUniformLocation(p->prog, "u_alpha_ref");
++    p->u_ffp = glGetUniformLocation(p->prog, "u_ffp");
+     glUseProgram(p->prog);
+     s_cur_prog = p->prog;
+     for (i = 0; i < 4; i++) {
+@@ -1767,6 +1773,20 @@
+             if (p->u_fc1 >= 0) glUniform4fv(p->u_fc1, 1, u.fc[1]);
+             if (p->u_afunc >= 0) glUniform1i(p->u_afunc, u.afunc);
+             if (p->u_aref >= 0) glUniform1f(p->u_aref, u.aref);
++        }
++    }
++
++    if (p->u_ffp >= 0) {
++        float lighting[NV2A_FFP_ROWS][4];
++        int enabled=b->xform==1 && r[0x314/4] && (b->attr_present&4);
++        nv2a_gl_ffp_uniforms(r,enabled,lighting);
++        if (!p->ffp_valid || memcmp(p->ffp,lighting,sizeof lighting)) {
++            memcpy(p->ffp,lighting,sizeof lighting);p->ffp_valid=1;
++            glUniform4fv(p->u_ffp,NV2A_FFP_ROWS,&lighting[0][0]);
++        }
++        if(enabled && r[0x328/4]) {
++            static unsigned skin_warned;
++            if(!skin_warned++) fprintf(stderr,"  [GL] unsupported FFP lighting skin mode %u\n",r[0x328/4]);
+         }
+     }
+ 
+--- a/src/nv2a_gl/gl_vsh.c
++++ b/src/nv2a_gl/gl_vsh.c
+@@ -423,6 +423,83 @@
+     return NV2A_VSH_MAIN("");
+ }
+ 
++/* The lighting function below adapts the fixed-function calculations from
++ * xemu hw/xbox/nv2a/pgraph/glsl/vsh-ff.c at
++ * 711b416840c2a528cb989621b6456a72bd02d768.
++ * Copyright (c) 2015 espes
++ * Copyright (c) 2015 Jannik Vogel
++ * Copyright (c) 2020-2025 Matt Borgerson
++ *
++ * This portion is free software; you can redistribute it and/or modify it
++ * under the GNU Lesser General Public License as published by the Free
++ * Software Foundation; either version 2, or (at your option) any later version.
++ * It is distributed WITHOUT ANY WARRANTY; without even the implied warranty
++ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
++ * General Public License for more details: https://www.gnu.org/licenses/.
++ * The surrounding original translator retains its upstream MIT terms.
++ *
++ * This path excludes vertex skinning. Cone/specular factors use the NV2A
++ * rational coefficients described in US6417851B1. */
++const char *nv2a_gl_vsh_lighting(void)
++{
++    return
++        "#define NV2A_FFP_LIGHTING 1\n"
++        "uniform vec4 u_ffp[84];\n"
++        "vec3 ffp_unit(vec3 v) { float q=dot(v,v); return q>0.0?v*inversesqrt(q):vec3(0.0); }\n"
++        "vec3 ffp_material(int s, vec4 d, vec4 p) { return s==1?d.rgb:s==2?p.rgb:vec3(1.0); }\n"
++        "void nv2a_ffp_colors(vec4 pos, vec4 normal, vec4 diffuse, vec4 specular, out vec4 d0, out vec4 d1) {\n"
++        "    if(u_ffp[0].x==0.0) { d0=diffuse; d1=specular; return; }\n"
++        "    vec4 ep; vec3 n;\n"
++        "    for(int k=0;k<4;++k) ep[k]=dot(u_ffp[5+k],pos);\n"
++        "    for(int k=0;k<3;++k) n[k]=dot(u_ffp[9+k].xyz,normal.xyz);\n"
++        "    if(u_ffp[0].y!=0.0) n=ffp_unit(n);\n"
++        "    int cm=int(u_ffp[2].w), ctl=int(u_ffp[0].w);\n"
++        "    int es=cm&3, am=(cm>>2)&3, ds=(cm>>4)&3, ss=(cm>>6)&3;\n"
++        "    vec3 em=ffp_material(es,diffuse,specular), amb=ffp_material(am,diffuse,specular);\n"
++        "    vec3 dm=ffp_material(ds,diffuse,specular), sm=ffp_material(ss,diffuse,specular);\n"
++        "    float alpha=ds==0?u_ffp[1].a:ds==1?diffuse.a:specular.a;\n"
++        "    vec3 color=(es==0 || am==0)?u_ffp[1].rgb:em;\n"
++        "    if(es!=0 && am!=0) color+=amb*u_ffp[3].rgb;\n"
++        "    else if(es!=0) color+=em*u_ffp[3].rgb;\n"
++        "    else if(am!=0) color+=amb*u_ffp[3].rgb;\n"
++        "    vec3 shiny=vec3(0.0);\n"
++        "    vec3 eye=(ctl&65536)!=0?ffp_unit(u_ffp[4].xyz/u_ffp[4].w-ep.xyz/ep.w):vec3(0.0);\n"
++        "    for(int i=0;i<8;++i) {\n"
++        "        int b=12+i*9, kind=int(u_ffp[b].w); if(kind==0) continue;\n"
++        "        vec3 l,h; float att=1.0;\n"
++        "        if(kind==1) {\n"
++        "            l=ffp_unit(u_ffp[b+3].xyz); h=(ctl&65536)!=0?ffp_unit(l+eye):u_ffp[b+4].xyz;\n"
++        "        } else {\n"
++        "            l=u_ffp[b+5].xyz-ep.xyz/ep.w; float dist=length(l);\n"
++        "            if(dist>u_ffp[b+1].w) continue; l=ffp_unit(l);\n"
++        "            vec3 a=u_ffp[b+6].xyz; att=1.0/(a.x+a.y*dist+a.z*dist*dist);\n"
++        "            h=ffp_unit(l+eye);\n"
++        "            if(kind==3) {\n"
++        "                float s=dot(u_ffp[b+8].xyz,l)+u_ffp[b+8].w, cone=0.0;\n"
++        "                if(s>=1.0) cone=1.0;\n"
++        "                else if(s>0.0 && s>-u_ffp[b+7].x) {\n"
++        "                    vec3 f=u_ffp[b+7].xyz; float den=f.y*s+f.z;\n"
++        "                    cone=den==0.0?1.0:den>0.0?clamp((s+f.x)/den,0.0,1.0):0.0;\n"
++        "                }\n"
++        "                att*=cone;\n"
++        "            }\n"
++        "        }\n"
++        "        float ndl=max(dot(n,l),0.0), ndh=max(dot(n,h),0.0), pf=0.0;\n"
++        "        vec3 f=u_ffp[2].xyz;\n"
++        "        if(ndl>0.0 && ndh>-f.x) {\n"
++        "            float den=f.y*ndh+f.z; pf=den==0.0?10000.0:den>0.0?clamp((ndh+f.x)/den,0.0,10000.0):0.0;\n"
++        "        }\n"
++        "        color+=att*(u_ffp[b].rgb*amb+u_ffp[b+1].rgb*dm*ndl);\n"
++        "        shiny+=att*u_ffp[b+2].rgb*sm*pf;\n"
++        "    }\n"
++        "    d0=vec4(color,alpha); d1=vec4(shiny,specular.a);\n"
++        "    if(u_ffp[0].z==0.0) d1=vec4(0.0,0.0,0.0,1.0);\n"
++        "    else { if((ctl&1)==0) { d0.rgb+=d1.rgb;d1=specular; }\n"
++        "           if((ctl&131072)!=0) d1.a=1.0; }\n"
++        "    d0=clamp(d0,0.0,1.0);d1=clamp(d1,0.0,1.0);\n"
++        "}\n";
++}
++
+ const char *nv2a_gl_vsh_fixed(void)
+ {
+     /* Vulkan: u_xform is a member of the prelude's uniform block. */
+@@ -441,7 +518,12 @@
+         "        float w = (v0.w > 0.0) ? 1.0 / v0.w : 1.0;\n"
+         "        gl_Position = nv2a_clip(v0.xyz * w, w);\n"
+         "    }\n"
++        "#ifdef NV2A_FFP_LIGHTING\n"
++        "    nv2a_ffp_colors(v0, v2, v3, v4, oD0, oD1);\n"
++        "    vD0 = clamp(oD0, 0.0, 1.0); vD1 = clamp(oD1, 0.0, 1.0);\n"
++        "#else\n"
+         "    vD0 = clamp(v3, 0.0, 1.0); vD1 = clamp(v4, 0.0, 1.0);\n"
++        "#endif\n"
+         "    vT0 = v9; vT1 = v10; vT2 = v11; vT3 = v12; vFog = 0.0;\n"
+         "}\n";
+     return nv2a_shader_vk ? body + sizeof decl - 1 : body;
+--- a/src/nv2a_gl/gl_vsh.h
++++ b/src/nv2a_gl/gl_vsh.h
+@@ -19,5 +19,7 @@
+ const char *nv2a_gl_vsh_main_program(void);
+ /* main() for fixed-function / pre-transformed batches (no program body). */
+ const char *nv2a_gl_vsh_fixed(void);
++/* GL fixed-function lighting; insert before fixed() after the prelude. */
++const char *nv2a_gl_vsh_lighting(void);
+ 
+ #endif
+--- /dev/null
++++ b/src/nv2a_gl/gl_lighting.h
+@@ -0,0 +1,29 @@
++/* NV097 fixed-function lighting uniforms. SPDX-License-Identifier: MIT
++ * Uniform transport follows Manhunt's gl_lighting.h (c) 2026 sp00nz;
++ * expanded here for inverse normals, spot cones and separate specular. */
++#ifndef NV2A_GL_LIGHTING_H
++#define NV2A_GL_LIGHTING_H
++#include <stdint.h>
++#include <string.h>
++#define NV2A_FFP_ROWS 84
++static inline void nv2a_gl_ffp_uniforms(const uint32_t *r, int enabled, float u[NV2A_FFP_ROWS][4])
++{
++    memset(u,0,NV2A_FFP_ROWS*16);
++    if(!enabled) return;
++    u[0][0]=1;u[0][1]=(float)!!r[0x3A4/4];u[0][2]=(float)!!r[0x3B8/4];u[0][3]=(float)r[0x294/4];
++    memcpy(u[1],r+0xA10/4,12);memcpy(&u[1][3],r+0x3B4/4,4);
++    memcpy(u[2],r+0x9E0/4,12);u[2][3]=(float)r[0x298/4];
++    memcpy(u[3],r+0x3A8/4,12);
++    memcpy(u[4],r+0xA50/4,16);
++    memcpy(u[5],r+0x480/4,64);memcpy(u[9],r+0x580/4,48);
++    for(int i=0;i<8;++i) {
++        unsigned b=(0x1000+i*0x80)/4,row=12+i*9;
++        memcpy(u[row],r+b,12);u[row][3]=(float)((r[0x3BC/4]>>(i*2))&3);
++        memcpy(u[row+1],r+b+0x0C/4,12);memcpy(&u[row+1][3],r+b+0x24/4,4);
++        memcpy(u[row+2],r+b+0x18/4,12);
++        memcpy(u[row+3],r+b+0x34/4,12);memcpy(u[row+4],r+b+0x28/4,12);
++        memcpy(u[row+5],r+b+0x5C/4,12);memcpy(u[row+6],r+b+0x68/4,12);
++        memcpy(u[row+7],r+b+0x40/4,12);memcpy(u[row+8],r+b+0x4C/4,16);
++    }
++}
++#endif

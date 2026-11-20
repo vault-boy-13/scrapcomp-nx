@@ -1,0 +1,113 @@
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -2609,6 +2609,7 @@
+         #define FAKE_RWDATA_VA  0x00700000  /* RW engine data area (in BSS) */
+ 
+         MEM32_INIT(XBOX_FS_BASE + 0x28, FAKE_TLS_VA);
++        xbox_SetThreadIdentity(XBOX_FS_BASE, GetCurrentThreadId());
+         /* TLS[0x28] = pointer to RW data area */
+         MEM32_INIT(FAKE_TLS_VA + 0x28, FAKE_RWDATA_VA);
+ 
+@@ -3378,28 +3379,47 @@
+  * with the image's initialised thread-local data rather than zeros, and its
+  * own per-thread structure behind slot 0.
+  */
++/* fs:[28] names the current Xbox thread object. XAPI reads UniqueThread
++ * at +12C directly; sharing the loader's stand-in made every thread ID zero
++ * and let the audio engine mistake main-thread calls for worker reentry. */
++void xbox_SetThreadIdentity(uint32_t tib, uint32_t thread_id)
++{
++    uint32_t object = *(uint32_t *)((uintptr_t)tib + 0x28 + g_memory_offset);
++    if (object)
++        *(uint32_t *)((uintptr_t)object + 0x12C + g_memory_offset) = thread_id;
++}
++
+ uint32_t xbox_AllocThreadTib(void)
+ {
+     /* XBOX_VA is scoped to the loader; the same arithmetic, spelled here. */
+     #define TIB_VA(va) ((void *)((uintptr_t)(va) + g_memory_offset))
+     const uint32_t tib_size = 0x40;
+-    uint32_t tib, block, thread_data, total;
++    uint32_t tib, block, thread_data, total, object;
++    const uint32_t object_size = 0x400;
+ 
+     if (!g_tls_total)
+         return 0;                    /* image has no TLS; nothing to copy */
+ 
+     total = g_tls_total;
+-    tib = xbox_HeapAlloc(tib_size + total + g_tls_thread_size, 16);
++    tib = xbox_HeapAlloc(tib_size + total + g_tls_thread_size + 15 + object_size, 16);
+     if (!tib)
+         return 0;
+     block       = tib + tib_size;
+     thread_data = block + total;
++    object = (thread_data + g_tls_thread_size + 15u) & ~15u;
+ 
+     /* The TIB itself, copied so stack bounds and the fields the title filled
+      * in are inherited, then the two that must not be. */
+     memcpy(TIB_VA(tib), TIB_VA(XBOX_TIB_MAIN), tib_size);
+     memcpy(TIB_VA(block), TIB_VA(g_tls_template_va), total);
+     memset(TIB_VA(thread_data), 0, g_tls_thread_size);
++    /* Retain the loader's existing stand-in fields, including +28, while
++     * giving this thread independent identity storage. Bind the ID before
++     * the worker can execute guest code. */
++    uint32_t main_object = *(uint32_t *)TIB_VA(XBOX_TIB_MAIN + 0x28);
++    memcpy(TIB_VA(object), TIB_VA(main_object), object_size);
++    *(uint32_t *)TIB_VA(object + 0x12C) = 0;
++    *(uint32_t *)TIB_VA(tib + 0x28) = object;
+ 
+     *(uint32_t *)TIB_VA(tib + 0x00) = 0xFFFFFFFFu;   /* own SEH chain    */
+     *(uint32_t *)TIB_VA(block)      = thread_data;   /* slot 0           */
+--- a/src/kernel/xbox_memory_layout.h
++++ b/src/kernel/xbox_memory_layout.h
+@@ -518,6 +518,7 @@
+ /* A TIB and TLS block for a newly spawned guest thread, copied from the
+  * template the loader built. Returns the new TIB's Xbox VA, or 0. */
+ uint32_t xbox_AllocThreadTib(void);
++void xbox_SetThreadIdentity(uint32_t tib, uint32_t thread_id);
+ 
+ /**
+  * Return a worker's stack when the worker ends. Takes the value
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -483,7 +483,8 @@
+ static uint32_t guest_thread_self(void)
+ {
+     DWORD tid = GetCurrentThreadId();
+-    uint32_t kthread = g_fs_base;
++    xbox_SetThreadIdentity(g_fs_base, tid);
++    uint32_t kthread = BRIDGE_MEM32(g_fs_base + 0x28);
+     int i, free_slot = -1;
+ 
+     AcquireSRWLockExclusive(&s_guest_threads_lock);
+@@ -915,8 +916,10 @@
+             if (!s_guest_threads[i].tid) {
+                 DuplicateHandle(GetCurrentProcess(), th, GetCurrentProcess(),
+                                 &s_guest_threads[i].h, 0, FALSE, DUPLICATE_SAME_ACCESS);
+-                s_guest_threads[i].kthread = s->tib;
+-                s_guest_threads[i].tid = GetThreadId(th);
++                DWORD tid = GetThreadId(th);
++                xbox_SetThreadIdentity(s->tib, tid);
++                s_guest_threads[i].kthread = BRIDGE_MEM32(s->tib + 0x28);
++                s_guest_threads[i].tid = tid;
+                 break;
+             }
+         ReleaseSRWLockExclusive(&s_guest_threads_lock);
+@@ -3280,6 +3283,7 @@
+             return 0;
+         }
+         g_fs_base = tib;
++        xbox_SetThreadIdentity(tib, GetCurrentThreadId());
+     }
+ 
+     for (;;) {
+--- a/src/usb/ohci.c
++++ b/src/usb/ohci.c
+@@ -1124,6 +1124,7 @@
+             return 0;
+         }
+         g_fs_base = tib;
++        xbox_SetThreadIdentity(tib, GetCurrentThreadId());
+     }
+ 
+     for (;;) {

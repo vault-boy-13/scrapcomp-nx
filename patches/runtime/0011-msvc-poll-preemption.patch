@@ -1,0 +1,21 @@
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -285,10 +285,17 @@
+  * 16, a host yield every 64 -- which also hands the guest lock (kernel_bridge.c)
+  * to whichever guest thread, ISR or DPC the loop is waiting for. */
+ #if defined(_MSC_VER)
+-#define RECOMP_SPIN_HINT() _mm_pause()
+ extern volatile int g_gil_contended;
+ void recomp_preempt(void);
+ #define RECOMP_PREEMPT() do { if (g_gil_contended) recomp_preempt(); } while (0)
++static inline void recomp_spin_hint(void)
++{
++    static RECOMP_TLS unsigned turns;
++    _mm_pause();
++    if ((++turns & 63u) == 0)
++        RECOMP_PREEMPT(); /* let the ISR/DPC that satisfies this poll run */
++}
++#define RECOMP_SPIN_HINT() recomp_spin_hint()
+ #else
+ #include <sched.h>
+ void recomp_spin_wake(void);        /* runtime: wake the hardware threads */

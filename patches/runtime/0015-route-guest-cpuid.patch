@@ -1,0 +1,39 @@
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -396,7 +396,7 @@
+ # Instructions with undefined/unpredictable flags (clear tracking)
+ _FLAGS_UNDEFINED = frozenset({
+     "mul", "div", "idiv",  # Flags partially undefined
+-    "rdtsc", "cpuid",      # Special instructions
++    "rdtsc",               # Timestamp read (legacy tracking)
+     "lock xadd",           # Lock prefix - complex flag behavior
+     # popfd REPLACES every flag with whatever was pushed. Its flags are not
+     # architecturally undefined -- they are simply not knowable from the
+@@ -476,6 +476,8 @@
+     # Prefetch hints
+     "prefetchnta", "prefetcht0", "prefetcht1", "prefetcht2",
+ })
++_EFLAGS_PRESERVE = _EFLAGS_PRESERVE | {"cpuid"}
++
+ 
+ 
+ def _has_xmm_operand(ops):
+@@ -1391,6 +1393,9 @@
+         m = insn.mnemonic
+         ops = insn.operands
+         nops = len(ops)
++
++        if m == "cpuid":
++            return [f"recomp_cpuid(eax, &eax, &ebx, &ecx, &edx, 0x{insn.address:08X}u);"]
+ 
+         # ── NOP ──
+         if m == "nop" or (m == "lea" and nops == 2 and
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -1526,3 +1526,6 @@
+ #define RECOMP_UNIMPL(_text, _va) recomp_unimpl((_text), (_va))
+ 
+ #endif /* RECOMP_TYPES_H */
++
++/* Optional title CPU identity model (implemented by the game host). */
++void recomp_cpuid(uint32_t leaf, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d, uint32_t va);

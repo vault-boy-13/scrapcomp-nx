@@ -87,6 +87,9 @@ def vs_environment(p):
                 if old.lower() == key.lower():
                     env.pop(old)
             env[key] = value
+    # Prefer English diagnostics if that language pack exists. CMake separately
+    # probes /showIncludes in UTF-8 because localized installations may fall back.
+    env['VSLANG'] = '1033'
     return env
 
 
@@ -163,16 +166,35 @@ def generate():
     env = os.environ.copy()
     env.update(PYTHONPATH=str(RUNTIME), PYTHONDONTWRITEBYTECODE='1', PYTHONUTF8='1')
     out = base.parent / 'c'
+    seeds_path = ROOT / 'config/scrapland/seed_functions.json'
+    seeds_sha256 = digest(seeds_path)
+    seeds = json.loads(seeds_path.read_text())
+    detected = {int(item['start'], 16) for item in
+                json.loads((base / 'disasm/functions.json').read_text())}
+    if any(int(item['start'], 0) not in detected for item in seeds):
+        raise RuntimeError('Analysis is missing configured seeds; run analyze before generate')
+    recovery = ROOT / IMAGE['coalesce_functions'] if IMAGE.get('coalesce_functions') else None
+    recovery_args = ['--coalesce-functions', recovery] if recovery else []
+    wrappers = ROOT / IMAGE['manual_wrappers'] if IMAGE.get('manual_wrappers') else None
+    wrappers_sha256 = digest(wrappers) if wrappers else None
+    wrapper_args = ['--exclude-manual', wrappers] if wrappers else []
     run([sys.executable, '-B', '-m', 'tools.recomp', ROOT / IMAGE['path'],
          '--game-name', 'Scrapland', '--all', '--split', '150', '--gen-dir', out,
          '--output-dir', base.parent / 'lift-report', '--disasm-dir', base / 'disasm',
          '--func-id-dir', base / 'func_id', '--abi-dir', base / 'abi',
-         '--mmio-sections', ','.join(IMAGE['mmio_sections'])],
+         '--mmio-sections', ','.join(IMAGE['mmio_sections']), *recovery_args, *wrapper_args],
         name='generate-c', cwd=RUNTIME, env=env)
+    if digest(seeds_path) != seeds_sha256:
+        raise RuntimeError('Seeds changed during generation; refusing a mismatched manifest')
+    if wrappers and digest(wrappers) != wrappers_sha256:
+        raise RuntimeError('Manual wrappers changed during generation; refusing a mismatched manifest')
     files = [p for p in out.iterdir() if p.is_file()]
     write_json(base.parent / 'codegen-manifest.json', {
         'image_sha256': IMAGE['sha256'], 'runtime_source': json.loads((RUNTIME / '.workspace-source.json').read_text()),
         'config_sha256': digest(ROOT / 'config/scrapland/image.json'),
+        'coalesce_sha256': digest(recovery) if recovery else None,
+        'seeds_sha256': seeds_sha256,
+        'manual_wrappers_sha256': wrappers_sha256,
         'files': {p.name: digest(p) for p in sorted(files)},
         'status': 'Generated; not yet CPU conformance or gameplay validated',
     })
@@ -333,11 +355,27 @@ def lock_dependencies():
     print('config/dependencies.lock.json written')
 
 
+def build_game_host():
+    from game_host import build
+    build()
+
+
+def run_game_host():
+    from game_host import run
+    raise SystemExit(run(15))
+
+
+def boot_report():
+    from analyze_boot import analyze
+    analyze()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['prepare', 'doctor', 'analyze', 'generate', 'build-host',
                                            'build-switch', 'scan-xdk', 'stage', 'check',
-                                           'emu-prepare', 'lock-dependencies'])
+                                           'emu-prepare', 'lock-dependencies', 'boot-report',
+                                           'build-game-host', 'run-game-host'])
     args = parser.parse_args()
     globals()[args.command.replace('-', '_')]()
 

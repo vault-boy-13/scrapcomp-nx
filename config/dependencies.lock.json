@@ -6,8 +6,8 @@
         "commit": "d3bbc3094f8e1ad3b34593eabd431f7d251b14cb",
         "prefix": "xboxrecomp"
       },
-      "tree_sha256": "17ebaed2ad0a081292180d9fc043815f18c9be1a42f9745685708563630fe90b",
-      "file_count": 445
+      "tree_sha256": "0aa37d6c17feaebc37e2ef2875505124516f19decc8800315e98f75271d88669",
+      "file_count": 451
     },
     "XboxXBE-Recomp": {
       "identity": {
@@ -37,7 +37,40 @@
   "patches": {
     "patches/hle-tools/0001-msvc-format-attribute.patch": "af23eaef1514235a1d17230fc3c7d76e68f2e2e5a01b14fb4f34609975a33c01",
     "patches/hle-tools/0002-msvc-format-attributes-remaining.patch": "828a43e1a82d607f9a4016cfde3aa3fcb7d2e6ece2c71a171cde10eac23b5efc",
-    "patches/runtime/0001-native-windows-executor-portability.patch": "4b60b99eacb2922a46b1558e92b820adb15de23bf1c3c84867def81d1d6f9cc9"
+    "patches/runtime/0001-native-windows-executor-portability.patch": "4b60b99eacb2922a46b1558e92b820adb15de23bf1c3c84867def81d1d6f9cc9",
+    "patches/runtime/0002-msvc-sse-conversion-math.patch": "843b04e2db25ac2e758d7ddf207547904789886f0e1c5bef73f68346ed117127",
+    "patches/runtime/0003-report-privileged-register-moves.patch": "d95a4f325377e1fb0a21b9504a4fe328ab43cceeeb917d6bba6ef7997af2d7df",
+    "patches/runtime/0004-cache-static-callback-ranges.patch": "ab9c4b9a3d508a1f8b5db23fe453706bfe8062062bc8ea87d76f4dd14adb3a81",
+    "patches/runtime/0005-guest-interrupt-flag.patch": "43426251b965e83d84378d9f14170a1b912d415f1a8a07be415a95543c898ebe",
+    "patches/runtime/0006-native-windows-raw-opengl.patch": "9d879673fa228792697d37690f59e9e1b4b73cd2a4103b18bcea7dd51dd499c2",
+    "patches/runtime/0007-recover-bounded-inline-tables.patch": "f5737e32ba76df59e6a7793395d0c3d9b1f29d61f7220c3a89976c3d3d3350b6",
+    "patches/runtime/0008-route-guest-port-output.patch": "7531826bc546d0c14518b4178a0b6e274ea6b24655e2d077ae91172f222bda39",
+    "patches/runtime/0009-coherent-guest-cache-barrier.patch": "34d9e8e319251a86d08820ca6e90c0ab605202368ed2581058c59078e0da8650",
+    "patches/runtime/0010-route-guest-port-input.patch": "b6ad563783347da56454f9c409d2356ed579547221f5e328790a64620bd9cd60",
+    "patches/runtime/0011-msvc-poll-preemption.patch": "590a9632d049118fe41d42fd2b9509ba3f88d58f0ddb53d065e409ca991c4a1d",
+    "patches/runtime/0012-pvideo-owner-thread-integration.patch": "bfae7cc83bd49db57e45b553251f89c23e0416853aecedf96c01c996354340bb",
+    "patches/runtime/0013-optional-real-dsp-integration.patch": "6fe08be6b12f00df242c7b2c1b06e38747ea07540d9488a73ab9fa0483285bc2",
+    "patches/runtime/0014-mmio-string-block-access.patch": "2c07c9d967dfaa4eb4b19af81686c7bc77622c991c95a62a879f6f60371677ac",
+    "patches/runtime/0015-route-guest-cpuid.patch": "96a49a5de109e5ec98c08baad8ff12fd58da79b9f28bf904dc06b8e918c8a2e5",
+    "patches/runtime/0016-prove-local-loop-aliases.patch": "09dfbcd8e2cdfcfdd494b280bb1ab45dcdf28b5ad6b587f4bbbb25e3b7772933",
+    "patches/runtime/0017-recover-assertion-continuations.patch": "974f14ceaad073c59a64766f8537eaa8d7c1d220232bdffe77b2847525a70930",
+    "patches/runtime/0018-firmware-return-observer.patch": "dabfcfea24b8bcc20856183c22f3b2158f60ee106a49fba1487583be76c55c7f",
+    "patches/runtime/0019-x87-compare-lahf.patch": "dcf9955cce6015cb608210aaff78fb09c310cffb92f0ab7f64eadd45beb75fbe",
+    "patches/runtime/0020-g8b8-texture-decoding.patch": "1bf7076e4d483adb0da97d173e4be563f121bb0bc541e41a15cc09b8496969f3",
+    "patches/runtime/0021-scripted-stick-input.patch": "998b9ba27f53d52e7dc92525bb4a563432b9c3a0addcda94be15164ca4d931f8",
+    "patches/runtime/0022-isolate-hdd-save-directories.patch": "bb3e78bff1691b68bc2a0025257fe2884be313a6c5770f7c6f9a359d775254cd",
+    "patches/runtime/0023-audio-output-observer.patch": "8b93e7b99f236ca8936165cc70fba35c81954de73ba7f08b57446fcb96c62e31",
+    "patches/runtime/0024-surface-format-pixel-size.patch": "d340491348c1ea7acd54cf5b49a69beaf2eb6b906acaaa2c2fab7c1cd62a43e1",
+    "patches/runtime/0025-serialize-gpu-interrupt-hold.patch": "7527c3c077e3600df1986ec572c4d437bc4ac47a5e8c2e87aa38c59f7caf469d",
+    "patches/runtime/0026-opengl-bump-texture-modes.patch": "c51ee363859ec5a8a2bbb205a9c5393936402b1676d05fbdca574721a1b955c5",
+    "patches/runtime/0027-sounding-voice-observation.patch": "8c816c6c3576ffb75a109bde4af0c54129a5a16d55a62597ce8e234174b42496",
+    "patches/runtime/0028-opengl-fixed-function-lighting.patch": "179272afe6786d09540c334642945aec0668302ddcafb536ae0ea0225bd69bb2",
+    "patches/runtime/0029-apu-global-sample-counter.patch": "2bd754702b191ae33acad17398a8fea0c2d1c8d8b6998ab24425d31b76f07e01",
+    "patches/runtime/0030-disjoint-dma-page-aliases.patch": "e4bfe37ecb2dffcb3c12fe5fab9955b79922bdaa05d712b8bd912c1041306e11",
+    "patches/runtime/0031-page-align-large-pool-allocations.patch": "8841902a9569fd850347c56bfb7e3ad183aa0c7a13bf8cb39696f6ffa01840ff",
+    "patches/runtime/0032-prime-xaudio2-before-start.patch": "46e7da77894d3b3b3863fa0ba958e4915317b100d4df00cc387427190477c1d7",
+    "patches/runtime/0033-per-thread-xbox-identity.patch": "6653d788419301c52c247af9a87656164c7b7bcaf484810d13b4645e14f9bacc",
+    "patches/runtime/0034-separate-host-output-dsp-clock.patch": "93ec9ff676303cd6eb63299120e3bc3fa108a2c9f80c3b26ba801ec8494688d4"
   },
   "devkit_packages": "devkitA64 r30-1\nlibnx 4.12.0-1\ndeko3d 0.5.0-1\nuam 1.1.0-2\nswitch-mesa 20.1.0-5\nswitch-sdl2 2.28.5-4\nswitch-cmake 1.5.2-1",
   "tool_binaries": {

@@ -1,0 +1,7 @@
+{
+  "version": "2.32.10",
+  "url": "https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-devel-2.32.10-VC.zip",
+  "sha256": "af347939395a58b365846aaea27391e69f9ec9d4dd650d6ac40802159b418a6e",
+  "digest_source": "GitHub release asset digest from libsdl-org/SDL release-2.32.10",
+  "directory": ".deps/SDL2-2.32.10"
+}

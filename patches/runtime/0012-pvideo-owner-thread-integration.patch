@@ -1,0 +1,96 @@
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -157,6 +157,13 @@
+ 
+ static HANDLE g_nv2a_ack_thread = NULL;
+ static volatile LONG g_nv2a_ack_stop = 0;
++static PVOID volatile s_nv2a_poll_hook;
++
++int xbox_Nv2aInstallPollHook(void (*poll)(void))
++{
++    PVOID previous = InterlockedCompareExchangePointer(&s_nv2a_poll_hook, (PVOID)poll, NULL);
++    return previous == NULL || previous == (PVOID)poll;
++}
+ 
+ /*
+  * NV2A busy-bit acknowledgement.
+@@ -1209,6 +1216,14 @@
+     volatile uint32_t *regs = (volatile uint32_t *)param;
+     while (!InterlockedCompareExchange(&g_nv2a_ack_stop, 0, 0)) {
+         nv2a_ack_flags(regs);
++        /* Device display engines share the GL owner's thread, not the flag
++         * acknowledgment thread. Project callbacks must consume inputs before
++         * returning and must never enter guest code. */
++        {
++            void (*poll)(void) = (void (*)(void))InterlockedCompareExchangePointer(
++                &s_nv2a_poll_hook, NULL, NULL);
++            if (poll) poll();
++        }
+         {
+             volatile uint32_t *put =
+                 (volatile uint32_t *)((char *)regs + NV2A_USER_DMA_PUT);
+--- a/src/kernel/xbox_memory_layout.h
++++ b/src/kernel/xbox_memory_layout.h
+@@ -220,6 +220,8 @@
+ void xbox_Nv2aVblankDrop(void);
+ /* Called by a project's wrapper around the title's vblank handler. */
+ void xbox_Nv2aVblankTaken(void);
++/* Install once before guest execution; runs on the NV2A executor/GL owner. */
++int xbox_Nv2aInstallPollHook(void (*poll)(void));
+ 
+ /* Route guest addresses [lo, hi) to a device model for code lifted with
+  * tools.recomp --mmio-sections (its MMIO_RD/MMIO_WR accessors call
+--- a/src/nv2a_gl/nv2a_gl.c
++++ b/src/nv2a_gl/nv2a_gl.c
+@@ -2627,2 +2627,40 @@
+     fprintf(stderr, "  [GL] NV2A OpenGL renderer registered\n");
+ }
++
++#include "nv2a_overlay.h"
++int nv2a_gl_present_overlay(const uint32_t *pixels, uint32_t width, uint32_t height,
++                            uint32_t logical_width, uint32_t logical_height)
++{
++    static GlSurf overlay;
++#if !defined(_WIN32)
++    if (s_q_on) return 0; /* queued ownership requires a copied video command */
++#endif
++    if (!pixels || !width || !height || !logical_width || !logical_height || !ready())
++        return 0;
++    state_dirty();
++    if (!overlay.tex) {
++        glGenTextures(1, &overlay.tex);
++        glGenFramebuffers(1, &overlay.fbo);
++    }
++    glBindTexture(GL_TEXTURE_2D, overlay.tex);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)width, (GLsizei)height,
++                 0, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
++    glBindFramebuffer(GL_FRAMEBUFFER, overlay.fbo);
++    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, overlay.tex, 0);
++    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
++        return 0;
++    overlay.w = logical_width; overlay.h = logical_height;
++    overlay.pw = width; overlay.ph = height;
++    overlay.aa_sx = overlay.aa_sy = 1;
++    GlSurf *previous_surface = s_last;
++    int previous_drawn = s_drew_any;
++    s_last = &overlay; s_drew_any = 1;
++    gl_flip();
++    s_last = previous_surface; s_drew_any = previous_drawn;
++    state_dirty();
++    return glGetError() == GL_NO_ERROR;
++}
+--- /dev/null
++++ b/src/nv2a_gl/nv2a_overlay.h
+@@ -0,0 +1,8 @@
++#ifndef NV2A_OVERLAY_H
++#define NV2A_OVERLAY_H
++#include <stdint.h>
++/* Synchronous owner-thread video scanout; pixels are top-first ARGB.
++ * Logical size controls aspect, stored size controls source pixels. */
++int nv2a_gl_present_overlay(const uint32_t *pixels, uint32_t width, uint32_t height,
++                            uint32_t logical_width, uint32_t logical_height);
++#endif

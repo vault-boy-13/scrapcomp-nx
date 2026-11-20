@@ -1,0 +1,121 @@
+--- a/src/nv2a_gl/gl_psh.c
++++ b/src/nv2a_gl/gl_psh.c
+@@ -18,7 +18,7 @@
+  * 8-11 T0-T3, 12 R0, 13 R1, and for the final combiner only 14 V1R0_SUM and
+  * 15 EF_PROD. R0.a starts as T0.a.
+  *
+- * ponytail: the bump-map and dot-product texture modes (DOT_ST and friends)
++ * ponytail: the dot-product texture modes (DOT_ST and friends)
+  * sample as plain 2D, and cube maps read black on GL (Vulkan samples them);
+  * the dependent AR/GB lookups are done. They are the
+  * next thing to add when a title's surfaces need them.
+@@ -240,6 +240,29 @@
+ static void tex_fetch(Out *o, int t, uint32_t mode, const Nv2aPshKey *k)
+ {
+     switch (mode) {
++    case 6:                                          /* BUMPENVMAP */
++    case 7:                                          /* BUMPENVMAP_LUM */
++        if (t == 0) {
++            emit(o, "    vec4 T0 = vec4(0.0);\n");
++        } else if (!nv2a_shader_vk) {
++            int source = input_stage(k, t);
++            /* Textures are uploaded as UNORM bytes. Interpret the bump's
++             * blue/green lanes as signed bytes, not expand-normal values.
++             * Matrix words are NV097 M00,M01,M10,M11 (column-major). */
++            emit(o, "    vec2 bump%d = T%d.bg * 255.0;\n", t, source);
++            emit(o, "    bump%d = vec2(bump%d.x >= 128.0 ? bump%d.x - 256.0 : bump%d.x, "
++                    "bump%d.y >= 128.0 ? bump%d.y - 256.0 : bump%d.y) / 127.0;\n",
++                 t, t, t, t, t, t, t);
++            emit(o, "    vec2 delta%d = vec2(dot(u_bump[%d].xz, bump%d), dot(u_bump[%d].yw, bump%d));\n",
++                 t, t, t, t, t);
++            emit(o, "    vec4 T%d = texture(t%d, (vT%d.xy + delta%d) * u_tscale[%d]);\n", t, t, t, t, t);
++            if (mode == 7)
++                emit(o, "    T%d *= T%d.r * u_bump_lum[%d].x + u_bump_lum[%d].y;\n", t, source, t, t);
++        } else {
++            /* Vulkan's uniform ABI has no bump state yet. */
++            emit(o, "    vec4 T%d = texture(t%d, vT%d.xy * u_tscale[%d]);\n", t, t, t, t);
++        }
++        break;
+     case 15:                                         /* DEPENDENT_AR */
+     case 16:                                         /* DEPENDENT_GB */
+         /* A lookup indexed by an earlier stage's colour -- NFSU2's colour
+@@ -321,6 +344,7 @@
+         "uniform sampler2D t0; uniform sampler2D t1;\n"
+         "uniform sampler2D t2; uniform sampler2D t3;\n"
+         "uniform vec2 u_tscale[4];\n"
++        "uniform vec4 u_bump[4]; uniform vec2 u_bump_lum[4];\n"
+         "uniform vec4 u_c0[8]; uniform vec4 u_c1[8];\n"
+         "uniform vec4 u_fc0; uniform vec4 u_fc1;\n"
+         "uniform vec4 u_fogcolor;\n"
+--- a/src/nv2a_gl/nv2a_gl.c
++++ b/src/nv2a_gl/nv2a_gl.c
+@@ -801,6 +801,7 @@
+     GLuint     prog;
+     GLint      u_c, u_surf, u_aa, u_m, u_vpoff, u_xform;
+     GLint      u_t[4], u_tscale, u_c0, u_c1, u_fc0, u_fc1, u_fogcolor, u_afunc, u_aref;
++    GLint      u_bump, u_bump_lum;
+     uint32_t   used;
+     int        vpc_valid;       /* vpc holds what this program's "c" was given */
+     uint32_t   vpc_gen;         /* ... as of the executor's constant version */
+@@ -811,6 +812,7 @@
+     int        uni_valid;       /* uni holds the rest of its uniforms */
+     struct GlUni {
+         float surf[4], aa[2], m[16], vpoff[4], tscale[4][2];
++        float bump[4][4], bump_lum[4][2];
+         float c0[8][4], c1[8][4], fog[4], fc[2][4], aref;
+         int   xform, afunc;
+     } uni;
+@@ -1079,6 +1081,8 @@
+     p->u_vpoff = glGetUniformLocation(p->prog, "u_vpoff");
+     p->u_xform = glGetUniformLocation(p->prog, "u_xform");
+     p->u_tscale = glGetUniformLocation(p->prog, "u_tscale");
++    p->u_bump = glGetUniformLocation(p->prog, "u_bump");
++    p->u_bump_lum = glGetUniformLocation(p->prog, "u_bump_lum");
+     p->u_c0 = glGetUniformLocation(p->prog, "u_c0");
+     p->u_c1 = glGetUniformLocation(p->prog, "u_c1");
+     p->u_fogcolor = glGetUniformLocation(p->prog, "u_fogcolor");
+@@ -1634,7 +1638,7 @@
+     s_drew_any = 1;
+     psh_key(r, &pk);
+     if (s_trace) {
+-        /* Texture modes not yet done in gl_psh.c: bump, dot product, cube. */
++        /* First-use state for dependent texture modes, dot products and cube. */
+         static uint32_t seen[32];
+         static int nseen;
+         uint32_t sp = pk.shader_program, t, odd = 0;
+@@ -1648,12 +1652,12 @@
+         if (odd && k2 == nseen && nseen < 32) {
+             seen[nseen++] = sp;
+             fprintf(stderr, "  [GL] texture modes 0x%05X (stages %u %u %u %u) prim %u n %u"
+-                    " fmt %02X %02X %02X %02X bumpmat1 %08X %08X %08X %08X\n",
++                    " fmt %02X %02X %02X %02X bumpmat2 %08X %08X %08X %08X\n",
+                     sp, sp & 0x1F, (sp >> 5) & 0x1F, (sp >> 10) & 0x1F, (sp >> 15) & 0x1F,
+                     b->prim, b->index_count,
+                     (r[0x1B04 / 4] >> 8) & 0xFF, (r[0x1B44 / 4] >> 8) & 0xFF,
+                     (r[0x1B84 / 4] >> 8) & 0xFF, (r[0x1BC4 / 4] >> 8) & 0xFF,
+-                    r[0x1B68 / 4], r[0x1B6C / 4], r[0x1B70 / 4], r[0x1B74 / 4]);
++                    r[0x1BA8 / 4], r[0x1BAC / 4], r[0x1BB0 / 4], r[0x1BB4 / 4]);
+         }
+     }
+     {
+@@ -1732,6 +1736,11 @@
+         memcpy(u.m, m, sizeof u.m);
+         memcpy(u.vpoff, b->vp_offset, sizeof u.vpoff);
+         memcpy(u.tscale, tscale, sizeof u.tscale);
++        for (i = 1; i < 4; ++i) {
++            uint32_t base = (0x1B00u + i * 0x40u) / 4;
++            memcpy(u.bump[i], r + base + 10, sizeof u.bump[i]);
++            memcpy(u.bump_lum[i], r + base + 14, sizeof u.bump_lum[i]);
++        }
+         memcpy(u.c0, c0, sizeof u.c0);
+         memcpy(u.c1, c1, sizeof u.c1);
+         memcpy(u.fog, fog, sizeof u.fog);
+@@ -1749,6 +1758,8 @@
+             if (p->u_vpoff >= 0) glUniform4fv(p->u_vpoff, 1, u.vpoff);
+             if (p->u_xform >= 0) glUniform1i(p->u_xform, u.xform);
+             if (p->u_tscale >= 0) glUniform2fv(p->u_tscale, 4, &u.tscale[0][0]);
++            if (p->u_bump >= 0) glUniform4fv(p->u_bump, 4, &u.bump[0][0]);
++            if (p->u_bump_lum >= 0) glUniform2fv(p->u_bump_lum, 4, &u.bump_lum[0][0]);
+             if (p->u_c0 >= 0) glUniform4fv(p->u_c0, 8, &u.c0[0][0]);
+             if (p->u_c1 >= 0) glUniform4fv(p->u_c1, 8, &u.c1[0][0]);
+             if (p->u_fogcolor >= 0) glUniform4fv(p->u_fogcolor, 1, u.fog);

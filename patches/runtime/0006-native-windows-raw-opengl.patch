@@ -1,0 +1,195 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -38,6 +38,7 @@
+ add_subdirectory(src/d3d)
+ 
+ option(XBOXRECOMP_VULKAN "Build the Vulkan renderer (nv2a_vk) instead of OpenGL" OFF)
++option(XBOXRECOMP_WIN32_OPENGL "Use the raw NV2A OpenGL backend on Windows" OFF)
+ 
+ # The Vulkan build on the Switch links mesa-switch's NVK. switch-sdl2 brings
+ # switch-mesa's EGL/GL, a second copy of Mesa's utilities: strip them from
+@@ -76,7 +77,7 @@
+ 
+ # Renderer for the pushbuffer executor (Linux, macOS, Switch): OpenGL, or
+ # Vulkan with XBOXRECOMP_VULKAN=ON. Windows keeps its D3D11 path.
+-if(NOT WIN32)
++if(NOT WIN32 OR XBOXRECOMP_WIN32_OPENGL)
+     if(XBOXRECOMP_VULKAN)
+         add_subdirectory(src/nv2a_vk)
+     else()
+@@ -98,7 +99,7 @@
+     xbox_nv2a
+     xbox_video
+ )
+-if(NOT WIN32)
++if(NOT WIN32 OR XBOXRECOMP_WIN32_OPENGL)
+     if(XBOXRECOMP_VULKAN)
+         target_link_libraries(xboxrecomp INTERFACE xbox_nv2a_vk)
+     else()
+--- a/src/nv2a_gl/CMakeLists.txt
++++ b/src/nv2a_gl/CMakeLists.txt
+@@ -13,7 +13,7 @@
+ )
+ target_include_directories(xbox_nv2a_gl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ 
+-if(NINTENDO_SWITCH)
++if(NINTENDO_SWITCH OR WIN32)
+     find_package(SDL2 REQUIRED)
+     target_link_libraries(xbox_nv2a_gl PUBLIC SDL2::SDL2)
+ else()
+@@ -21,6 +21,10 @@
+     pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+     target_link_libraries(xbox_nv2a_gl PUBLIC PkgConfig::SDL2)
+ endif()
++if(MSVC)
++    target_compile_options(xbox_nv2a_gl PRIVATE /we4013 /we4133)
++    target_compile_definitions(xbox_nv2a_gl PRIVATE _CRT_SECURE_NO_WARNINGS)
++endif()
+ if(NOT MSVC)
+     target_compile_options(xbox_nv2a_gl PRIVATE -Wall -Wextra -Wno-unused-parameter -O2)
+ endif()
+--- a/src/nv2a_gl/nv2a_gl.c
++++ b/src/nv2a_gl/nv2a_gl.c
+@@ -45,6 +45,25 @@
+ #include <string.h>
+ #include <time.h>
+ 
++#if defined(_MSC_VER)
++#define GL_WEAK
++#define CLOCK_MONOTONIC 1
++#define CLOCK_REALTIME 2
++static int gl_clock_gettime(int clock_id, struct timespec *ts)
++{
++    if (clock_id == CLOCK_REALTIME)
++        return timespec_get(ts, TIME_UTC) == TIME_UTC ? 0 : -1;
++    Uint64 ticks = SDL_GetPerformanceCounter(), frequency = SDL_GetPerformanceFrequency();
++    if (!frequency) return -1;
++    ts->tv_sec = (time_t)(ticks / frequency);
++    ts->tv_nsec = (long)((ticks % frequency) * 1000000000ull / frequency);
++    return 0;
++}
++#define clock_gettime gl_clock_gettime
++#else
++#define GL_WEAK __attribute__((weak))
++#endif
++
+ extern ptrdiff_t xbox_GetMemoryOffset(void);
+ 
+ int nv2a_gl_adopt_window(void **win, void **ctx);
+@@ -193,6 +212,25 @@
+         if (s_surf[i].fbo && s_surf[i].va == va)
+             return &s_surf[i];
+     return NULL;
++}
++
++int nv2a_gl_readback(uint32_t va, uint32_t *pixels, size_t capacity,
++                     uint32_t *width, uint32_t *height)
++{
++    GlSurf *s = surf_find(va);
++    if (s_state != 1 || !s || !pixels || !width || !height)
++        return 0;
++    *width = s->pw; *height = s->ph;
++    if ((uint64_t)s->pw * s->ph > capacity)
++        return 0;
++    glFinish();
++    glBindFramebuffer(GL_READ_FRAMEBUFFER, s->fbo);
++    glPixelStorei(GL_PACK_ALIGNMENT, 4);
++    glReadPixels(0, 0, (GLsizei)s->pw, (GLsizei)s->ph,
++                 GL_BGRA, GL_UNSIGNED_BYTE, pixels);
++    GLenum error = glGetError();
++    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
++    return error == GL_NO_ERROR;
+ }
+ 
+ static GlSurf *surf_get(uint32_t va, uint32_t w, uint32_t h,
+@@ -1146,7 +1184,7 @@
+  * overrides this: it stops drawing, releases its GL context, and hands back
+  * its SDL window and context (as void *) for the renderer to use. Returning
+  * 0 lets the renderer create its own. */
+-__attribute__((weak)) int nv2a_gl_adopt_window(void **win, void **ctx)
++GL_WEAK int nv2a_gl_adopt_window(void **win, void **ctx)
+ {
+     (void)win; (void)ctx;
+     return 0;
+@@ -1154,13 +1192,13 @@
+ 
+ /* Called on a present with nothing of the title's to show. Returns 1 if the
+  * host drew something (its loading screen) into the default framebuffer. */
+-__attribute__((weak)) int nv2a_gl_draw_placeholder(void)
++GL_WEAK int nv2a_gl_draw_placeholder(void)
+ {
+     return 0;
+ }
+ 
+ /* The on-screen size, if the host knows it better than SDL. */
+-__attribute__((weak)) int nv2a_gl_screen_size(int *w, int *h)
++GL_WEAK int nv2a_gl_screen_size(int *w, int *h)
+ {
+     (void)w; (void)h;
+     return 0;
+@@ -1989,7 +2027,7 @@
+ /* The host's per-frame hook (switch_saltynx.c: the frame rate for SaltyNX
+  * overlays), with the rendered picture's size. Weak and undefined
+  * elsewhere: the call is skipped. */
+-extern void nv2a_host_frame_presented(uint32_t width, uint32_t height) __attribute__((weak));
++extern void nv2a_host_frame_presented(uint32_t width, uint32_t height) GL_WEAK;
+ 
+ static void gl_flip(void)
+ {
+@@ -2165,6 +2203,7 @@
+  * Records are 16-byte aligned in one ring. Every record first carries the
+  * shadow's changes, because clears and presents read registers too (the
+  * clip, the depth range) and saw the executor's live shadow before. */
++#if !defined(_WIN32)
+ #include <pthread.h>
+ #include <time.h>
+ 
+@@ -2552,6 +2591,15 @@
+     q_draw,
+     NV2A_BACKEND_RAW_DIRECT,
+ };
++#else
++/* Windows starts with synchronous ownership. Do not silently enable the
++ * optional POSIX upload queue without porting its lifetime/atomic contract. */
++void nv2a_gl_queue_stats(double secs, int *gl_idle_pct, int *exec_wait_pct)
++{
++    (void)secs;
++    *gl_idle_pct = *exec_wait_pct = -1;
++}
++#endif
+ 
+ static const Nv2aBackend s_backend_gl = {
+     gl_clear,
+@@ -2563,6 +2611,7 @@
+ 
+ void nv2a_gl_install(void)
+ {
++#if !defined(_WIN32)
+     {
+         const char *e = getenv("RECOMP_GL_THREAD");
+         s_q_on = e && *e == '1' && q_start();
+@@ -2573,6 +2622,7 @@
+                         " (RECOMP_GL_THREAD=1)\n");
+         return;
+     }
++#endif
+     nv2a_backend_register(&s_backend_gl);
+     fprintf(stderr, "  [GL] NV2A OpenGL renderer registered\n");
+ }
+--- a/src/nv2a_gl/nv2a_gl.h
++++ b/src/nv2a_gl/nv2a_gl.h
+@@ -7,7 +7,14 @@
+  */
+ #ifndef NV2A_GL_H
+ #define NV2A_GL_H
++#include <stdint.h>
++#include <stddef.h>
+ 
+ void nv2a_gl_install(void);
++/* Call on the owning render thread. Reads an existing surface without
++ * creating one; rows and packed ARGB pixels follow GL storage orientation.
++ * Returns 0 for missing surfaces, insufficient capacity or GL errors. */
++int nv2a_gl_readback(uint32_t va, uint32_t *pixels, size_t capacity,
++                     uint32_t *width, uint32_t *height);
+ 
+ #endif

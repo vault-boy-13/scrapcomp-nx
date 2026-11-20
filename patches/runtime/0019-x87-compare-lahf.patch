@@ -1,0 +1,17 @@
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -498,6 +498,14 @@
+ 
+ def _lahf_value(flag_setter, flag_ops):
+     """C expression for the byte LAHF loads, or None if a flag is unknown."""
++    if flag_setter in ("fcompi", "fcomip", "fucomi", "fucompi",
++                       "fucomip", "fcomi"):
++        # FCOMI/FUCOMI write ZF/PF/CF and clear SF/AF/OF. The comparison
++        # survives non-flag-writing x87 pops before LAHF. Do not fall back
++        # to stale AH just because signed-condition queries are inapplicable.
++        return ("(uint8_t)(0x02 | ((g_fp_cmp == 0 || g_fp_cmp == 2) ? 0x40 : 0)"
++                " | (g_fp_cmp == 2 ? 0x04 : 0)"
++                " | ((g_fp_cmp < 0 || g_fp_cmp == 2) ? 0x01 : 0))")
+     if flag_setter in SSE_COMPARES:
+         # ZF, PF, CF = 1,1,1 unordered; 0,0,1 below; 1,0,0 equal; 0,0,0 above.
+         # SF (and OF, AF) are cleared.

@@ -1,0 +1,71 @@
+--- a/tools/recomp/translator.py
++++ b/tools/recomp/translator.py
+@@ -857,10 +857,12 @@
+             reject("extent is not backed by one code section")
+ 
+         expected = list(expected_starts)
+-        if (not expected or expected != sorted(set(expected))
++        if (expected != sorted(set(expected))
+                 or any(start <= target or start >= end
+                        for start in expected)):
+             reject("coalesce_starts must be sorted unique interior starts")
++        if not expected and end != self.func_db[target].get("end", target):
++            reject("empty recovery must preserve the detected extent")
+         actual = sorted(
+             start for start in self.func_db if target < start < end)
+         if actual != expected:
+@@ -898,6 +900,8 @@
+         if recovered is None:
+             reject("could not decode CFG")
+         instructions, jump_tables, _ = recovered
++        if not expected and not jump_tables:
++            reject("empty recovery requires an inline jump table")
+         # Padding can close coverage gaps, but must not become an executable
+         # predecessor that discards flags at the following real block.
+         padding = self._alignment_padding_gaps(target, end, instructions)
+@@ -942,7 +946,11 @@
+                         after = (table_end == instruction.address
+                                  or self._is_alignment_padding_range(
+                                      table_end, instruction.address))
+-                        if (table_start <= table_va < table_end
++                        # The existing table reader accepts both signed
++                        # negative indices (base one past the last slot) and
++                        # one-based indices (base one slot before the table).
++                        # Match that same bounded span, not arbitrary code.
++                        if (table_start - 4 <= table_va <= table_end
+                                 and (table_va - table_start) % 4 == 0
+                                 and before and after):
+                             covered_end = instruction.address
+@@ -1017,10 +1025,10 @@
+                 and not source.mem_index and source.mem_disp == 0)
+ 
+     def _alignment_padding_gaps(self, target, end, instructions):
+-        """Return gap starts that hold a wide alignment no-op sequence.
++        """Return gap starts that hold an exact alignment no-op sequence.
+ 
+         A decode gap is only treated as padding when the bytes at the coverage
+-        stop must start with a multi-byte no-op, contain only no-ops, and end
++        stop must start with a no-op, contain only no-ops, and end
+         precisely where the decode picks up again. Real unreached code fails
+         that test, so this cannot invent a body: it only identifies padding
+         the assembler inserted before an already reachable branch target.
+@@ -1040,7 +1048,8 @@
+                 decoded = (
+                     self.disasm.disassemble_function(raw_gap, cursor, end)
+                     if raw_gap else None)
+-                if decoded and self._is_multi_byte_nop(decoded[0]):
++                if decoded and (decoded[0].mnemonic == "nop"
++                                or self._is_multi_byte_nop(decoded[0])):
+                     padding_end = cursor
+                     for instruction in decoded:
+                         if (instruction.address != padding_end
+@@ -1063,7 +1072,8 @@
+         if not raw:
+             return False
+         decoded = self.disasm.disassemble_function(raw, start, end)
+-        if not decoded or not self._is_multi_byte_nop(decoded[0]):
++        if not decoded or not (decoded[0].mnemonic == "nop"
++                               or self._is_multi_byte_nop(decoded[0])):
+             return False
+         cursor = start
+         for instruction in decoded:

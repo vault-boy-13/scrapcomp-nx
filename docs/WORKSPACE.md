@@ -49,6 +49,32 @@ rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/workspace.ps
 
 ## Где лежат результаты
 
+### Диагностический host target игры
+
+Для первого исполнения lifted-кода добавлен Windows console target `scrapcomp_host`. Он использует ту же pinned xboxrecomp ABI и реальные сгенерированные функции; Switch и Ryubing в этом пути не участвуют. Это этап загрузки и диагностики, а не готовая игровая сборка.
+
+```powershell
+rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/workspace.ps1 boot-report
+rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/workspace.ps1 build-game-host
+rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/workspace.ps1 run-game-host
+```
+
+Если analysis/codegen отсутствуют или не соответствуют текущей конфигурации, сначала выполнить `analyze`, затем `generate`. `boot-report` сохраняет статические кандидаты вызовов, callbacks и Python string references в `generated/<image-prefix>/analysis/boot-path.json`; наличие ребра или строки не доказывает достижение при исполнении.
+
+`build-game-host` проверяет XBE SHA-256, manifest generated-файлов и patch lock, собирает и запускает числовой SSE probe, затем компилирует игровой `.exe` в один поток с отладочными символами. Неявные объявления функций считаются ошибкой компиляции. Header-only исправления runtime можно синхронизировать без повторного lifting: предыдущий manifest сохраняется, hash нового runtime header и patches записываются явно; тела игровых C-функций при этом не редактируются.
+
+Generated unresolved stubs заменяются в отдельном локальном `host-strict/unresolved.c` обработчиками, завершающими процесс при достижении адреса. Неизвестный ICALL, указатель вне кода и UNIMPL тоже останавливают исполнение. Это предотвращает принятие пустого возврата за успешную инициализацию. Первый проход всё ещё содержит неподтверждённые границы функций и возможные data-as-code участки: разбирать достигнутые случаи по реальным bytes/callers.
+
+`run-game-host` проверяет соответствие EXE/PDB и исходных manifests, выполняет ограниченный 15-секундный запуск и сохраняет лог/manifest в `runs/host/<UTC-run-id>/`. Для другого лимита: `rtk proxy .venv\Scripts\python.exe -B tools/game_host.py run --seconds 30`. Внешние `RECOMP_*` overrides не наследуются: текущий diagnostic runner задаёт собственные параметры GIL/log/watchdog. Игровые файлы берутся из `original/`, путь сохранений задаётся внутри run-каталога. Сам `.exe` также проверяет SHA-256 XBE до mapping; без аргументов ищет `original/Default.xbe` относительно рабочего каталога.
+
+При остановке guest команда возвращает ненулевой exit code, при timeout — `124`; фактический Windows process status также сохраняется в manifest. Текущий результат и доказательства CFG repair описаны в [BOOT_RECOVERY.md](BOOT_RECOVERY.md). Независимую поведенческую проверку восстановления цикла можно выполнить через `rtk proxy .venv\Scripts\python.exe -B tools/check_cfg_execution.py`.
+
+Exe находится в `build/host-workspace/scrapcomp_host.exe`, matching symbols — `scrapcomp_host.pdb`, identity — `game-build-manifest.json`. Для crash использовать symbols именно этой сборки. Возврат XBE entry, завершение по timeout и успешное создание памяти не являются доказательством меню или gameplay.
+
+Windows execution evidence сохраняется отдельно в локальном `reports/game-host-validation.json`. Старый `workspace-validation.json` относится к окружению и NRO-пробам. Runner запускает процесс с рабочим каталогом внутри `runs/host/<run-id>/`, включая автоматический `xbox_kernel.log`; при ручном запуске из корня этот default log также исключён из Git.
+
+### Каталоги
+
 ```text
 runtime/xboxrecomp/                         рабочий SDK из pinned NFSU2, локальные patches
 .deps/XboxXBE-Recomp/                       SDK/host tools из pinned BLACK

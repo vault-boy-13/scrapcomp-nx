@@ -1,0 +1,35 @@
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -417,7 +417,7 @@
+     "not",  # NOT does not modify flags
+     "call",
+     "int3", "int", "wait",
+-    "cld", "std", "cli", "sti",
++    "cld", "std", "cli", "sti", "out",
+     # LOOP counts ECX down and branches on it; LOOPE/LOOPNE additionally
+     # read ZF. None of the three write EFLAGS, so a comparison before the
+     # loop still answers the jcc after it.
+@@ -1398,6 +1398,13 @@
+                           ops[1].mem_base == ops[0].reg and
+                           not ops[1].mem_index and ops[1].mem_disp == 0):
+             return [f"/* nop */"]
++
++        if (m == "out" and len(ops) == 2 and ops[1].type == "reg"
++                and ops[1].reg in ("al", "ax", "eax")):
++            width = {"al": 1, "ax": 2, "eax": 4}[ops[1].reg]
++            return [f"recomp_port_out((uint16_t)({_fmt_operand_read(ops[0])}), "
++                    f"(uint32_t)({_fmt_operand_read(ops[1])}), {width}u, "
++                    f"0x{insn.address:08X}u);"]
+ 
+         # ── Data movement ──
+         if m == "mov":
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -101,6 +101,7 @@
+  * Set once during memory initialization, then read-only.
+  */
+ extern ptrdiff_t g_xbox_mem_offset;
++void recomp_port_out(uint32_t port, uint32_t value, uint32_t width, uint32_t va);
+ 
+ /* Bounds of the title's executable sections, filled in by
+  * xbox_MemoryLayoutInit from the XBE's own section table. Zero means "not

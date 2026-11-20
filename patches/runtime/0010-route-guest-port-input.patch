@@ -1,0 +1,35 @@
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -451,7 +451,7 @@
+     # SSE/MMX integer
+     "movd", "movq", "movntq",
+     "cvtps2pi", "cvttps2pi", "pinsrw", "pextrw",
+-    "emms",
++    "emms", "in",
+     "paddb", "paddw", "paddd", "paddq",
+     "psubb", "psubw", "psubd",
+     "paddsb", "paddsw", "paddusb", "psubsb", "psubsw", "psubusb",
+@@ -1709,6 +1709,13 @@
+                 "  eax = (uint32_t)_tsc; edx = (uint32_t)(_tsc >> 32); }"
+                 "  /* rdtsc */",
+             ]
++
++        if (m == "in" and len(ops) == 2 and ops[0].type == "reg"
++                and ops[0].reg in ("al", "ax", "eax")):
++            width = {"al": 1, "ax": 2, "eax": 4}[ops[0].reg]
++            read = (f"recomp_port_in((uint16_t)({_fmt_operand_read(ops[1])}), "
++                    f"{width}u, 0x{insn.address:08X}u)")
++            return [_fmt_set_reg(ops[0].reg, read)]
+ 
+         # ── Bit scan ──
+         # Index of the lowest (bsf) or highest (bsr) set bit. When the source
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -454,6 +454,7 @@
+  * make that division wrong by the ratio of the two clocks; the runtime scales
+  * to the console's rate instead. */
+ uint64_t xbox_ReadTimeStampCounter(void);
++uint32_t recomp_port_in(uint32_t port, uint32_t width, uint32_t va);
+ 
+ void recomp_trace_enter(const char *name, uint32_t va);
+ #define RECOMP_TRACE_ENTER(name, va) recomp_trace_enter((name), (va))

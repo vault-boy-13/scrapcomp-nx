@@ -1,0 +1,49 @@
+--- a/tools/recomp/translator.py
++++ b/tools/recomp/translator.py
+@@ -725,6 +725,9 @@
+         self.jump_table_entry_starts = set()
+         self._recovered_cfg = {}
+         self._ownership_ready = False
++        # Only derived table bounds, not all decoded instructions: repeated
++        # coalescence proofs rescan the image on memory-constrained hosts.
++        self._static_indirect_range_cache = {}
+ 
+     def discover_static_indirect_targets(self, *, coalescing=False):
+         """Recover function entries from bounded static callback tables."""
+@@ -734,16 +737,28 @@
+         for caller, func_info in list(self.func_db.items()):
+             end = func_info.get("end", caller)
+             recovered = self._recovered_cfg.get(caller)
+-            if recovered and recovered.get("instructions"):
++            recovered_instructions = recovered.get("instructions") if recovered else None
++            if recovered_instructions:
+                 end = recovered.get("end", end)
+-                instructions = recovered["instructions"]
++            cached = self._static_indirect_range_cache.get(caller)
++            if (cached is not None and cached[0] == end
++                    and cached[1] is recovered_instructions):
++                ranges = cached[2]
+             else:
+-                raw_bytes = self._read_func_bytes(caller, end)
+-                if not raw_bytes:
+-                    continue
+-                instructions = self.disasm.disassemble_function(
+-                    raw_bytes, caller, end)
+-            for lower, upper in self._find_static_indirect_ranges(instructions):
++                if recovered_instructions:
++                    instructions = recovered_instructions
++                else:
++                    raw_bytes = self._read_func_bytes(caller, end)
++                    if not raw_bytes:
++                        continue
++                    instructions = self.disasm.disassemble_function(
++                        raw_bytes, caller, end)
++                ranges = tuple(self._find_static_indirect_ranges(instructions))
++                self._static_indirect_range_cache[caller] = (
++                    end, recovered_instructions, ranges)
++            # Table validation depends on the current entry census and must
++            # run again even when the instruction-derived bounds are cached.
++            for lower, upper in ranges:
+                 targets = self._read_static_callback_table(
+                     lower, upper, original_starts)
+                 if targets is None:

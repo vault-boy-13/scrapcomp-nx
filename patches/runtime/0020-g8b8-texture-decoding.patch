@@ -1,0 +1,36 @@
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -1267,6 +1267,7 @@
+     case 0x05: return 0x11;                /* R5G6B5    -> LIN_R5G6B5    */
+     case 0x06: return 0x12;                /* A8R8G8B8  -> LIN_A8R8G8B8  */
+     case 0x07: return 0x1E;                /* X8R8G8B8  -> LIN_X8R8G8B8  */
++    case 0x28: return 0x17;                /* G8B8      -> LIN_G8B8      */
+     case 0x19: return 0x1F;                /* A8        -> LIN_A8        */
+     default:   return fmt;                 /* already linear, or unhandled */
+     }
+@@ -1363,6 +1364,15 @@
+               | (expand((t >>  8) & 0x0F, 4) << 16)
+               | (expand((t >>  4) & 0x0F, 4) <<  8)
+               |  expand( t        & 0x0F, 4);
++        return 1;
++    }
++
++    case 0x17: {                                    /* LIN_G8B8 */
++        uint32_t packed = ((const uint16_t *)p)[u];
++        uint32_t low = packed & 0xFFu, high = packed >> 8;
++        /* NV2A G8B8 supplies the two unsigned lanes as (low,high,low,high).
++         * It is distinct from the signed V8U8 format. */
++        *argb = (high << 24) | (low << 16) | (high << 8) | low;
+         return 1;
+     }
+ 
+--- a/src/nv2a_gl/nv2a_gl.c
++++ b/src/nv2a_gl/nv2a_gl.c
+@@ -467,6 +467,7 @@
+     if (color == 0x0C) return ((w + 3) / 4) * ((h + 3) / 4) * 8;
+     if (color == 0x0E || color == 0x0F) return ((w + 3) / 4) * ((h + 3) / 4) * 16;
+     if (pitch) return pitch * h;
++    if (color == 0x28 || color == 0x17) return w * h * 2;
+     return w * h * 4;          /* upper bound for swizzled formats */
+ }
+ 

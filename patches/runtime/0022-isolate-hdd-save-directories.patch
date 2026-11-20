@@ -1,0 +1,50 @@
+--- a/src/kernel/kernel_path.c
++++ b/src/kernel/kernel_path.c
+@@ -43,6 +43,10 @@
+ 
+ static const path_rule s_rules[] = {
+     { "\\Device\\CdRom0\\",                   0, NULL,         NULL          },
++    /* HDD user/title data is writable storage, including paths reached
++     * through guest U:/T: symbolic links. Keep it outside the disc input. */
++    { "\\Device\\Harddisk0\\Partition1\\UDATA", 1, "\\UserData", "/UserData" },
++    { "\\Device\\Harddisk0\\Partition1\\TDATA", 1, "\\TitleData", "/TitleData" },
+     { "\\Device\\Harddisk0\\Partition1\\",    0, NULL,         NULL          },
+     /* The rest of the disk. Partition 0 is the whole raw device, 2 holds
+      * system data, and 3-5 are the per-title caches behind X:, Y: and Z:.
+@@ -81,6 +85,18 @@
+ };
+ #define PATH_RULE_COUNT ((int)(sizeof(s_rules) / sizeof(s_rules[0])))
+ 
++/* Bare directory rules match themselves or descendants, not similarly
++ * named siblings (UDATA2, Partition30). Consume an optional separator. */
++static int match_rule(const char *path, const char *prefix)
++{
++    int n = match_prefix(path, prefix);
++    if (n && prefix[n-1] != '\\') {
++        if (path[n] && path[n] != '\\') return 0;
++        if (path[n] == '\\') n++;
++    }
++    return n;
++}
++
+ /*
+  * Rewrite a path through a drive letter the title mapped for itself.
+  *
+@@ -443,7 +459,7 @@
+     }
+ 
+     for (int i = 0; i < PATH_RULE_COUNT; i++) {
+-        skip = match_prefix(xbox_path, s_rules[i].prefix);
++        skip = match_rule(xbox_path, s_rules[i].prefix);
+         if (skip) {
+             remainder = xbox_path + skip;
+             base_dir  = s_rules[i].to_save ? s_save_dir : s_game_dir;
+@@ -709,7 +725,7 @@
+     }
+ 
+     for (int i = 0; i < PATH_RULE_COUNT; i++) {
+-        skip = match_prefix(xbox_path, s_rules[i].prefix);
++        skip = match_rule(xbox_path, s_rules[i].prefix);
+         if (skip) {
+             remainder = xbox_path + skip;
+             base_dir  = s_rules[i].to_save ? s_save_dir : s_game_dir;

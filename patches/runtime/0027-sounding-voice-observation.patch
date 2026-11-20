@@ -1,0 +1,33 @@
+--- a/src/apu/apu_vp.c
++++ b/src/apu/apu_vp.c
+@@ -1375,12 +1375,22 @@
+  * fetched non-silent samples, with the registers of one of each kind. */
+ static int   g_tr_on = -1, g_tr_unpaused, g_tr_sounding;
+ static char  g_tr_quiet[200], g_tr_loud[200];
++static uint32_t g_tr_seen[8];
+ 
+ void apu_vp_trace_voice(MCPXAPUState *d, uint16_t v, float peak, float ea)
+ {
+     char *dst;
+     if (g_tr_on < 0) g_tr_on = getenv("RECOMP_APU_TRACE") != NULL;
+     if (!g_tr_on) return;
++    if (peak > 0.0f && !(g_tr_seen[v / 32] & (1u << (v % 32)))) {
++        g_tr_seen[v / 32] |= 1u << (v % 32);
++        fprintf(stderr, "[APU-ACTIVE] v%03X peak %.6f ea %.3f rate %.6f fmt %08X ba %08X ebo %X cbo %X\n",
++                v, peak, ea, g_dbg.vp.v[v].rate,
++                voice_get_mask(d, v, NV_PAVS_VOICE_CFG_FMT, 0xFFFFFFFF),
++                voice_get_mask(d, v, NV_PAVS_VOICE_CUR_PSL_START, 0xFFFFFFFF),
++                voice_get_mask(d, v, NV_PAVS_VOICE_PAR_NEXT, NV_PAVS_VOICE_PAR_NEXT_EBO),
++                voice_get_mask(d, v, NV_PAVS_VOICE_PAR_OFFSET, NV_PAVS_VOICE_PAR_OFFSET_CBO));
++    }
+     g_tr_unpaused++;
+     if (peak > 0.0f) g_tr_sounding++;
+     dst = peak > 0.0f ? g_tr_loud : g_tr_quiet;
+@@ -1407,6 +1417,7 @@
+             g_tr_unpaused, g_tr_sounding, g_vp_mix_peak, g_tr_quiet, g_tr_loud);
+     g_tr_unpaused = g_tr_sounding = 0;
+     g_tr_quiet[0] = g_tr_loud[0] = 0;
++    memset(g_tr_seen, 0, sizeof g_tr_seen);
+ }
+ void apu_vp_get_stats(int *voices, float *mix_peak)
+ {

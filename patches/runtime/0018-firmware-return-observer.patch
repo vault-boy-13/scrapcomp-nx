@@ -1,0 +1,43 @@
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -28,6 +28,7 @@
+ #include "kernel.h"
+ #include "xbox_memory_layout.h"
+ #include "guest_vmem.h"
++#include "firmware_observer.h"
+ #include "recomp_icall_feedback.h"
+ #include <stdio.h>
+ /* stdlib.h is load-bearing, not tidiness. Without it C89 implicit declaration
+@@ -1688,6 +1689,13 @@
+  *
+  * It never returns on hardware. Returning here would let the game run on past
+  * a decision to quit, which reads as a hang rather than an exit. */
++static xbox_firmware_observer firmware_observer;
++
++void xbox_SetFirmwareObserver(xbox_firmware_observer observer)
++{
++    firmware_observer = observer;
++}
++
+ static void bridge_HalReturnToFirmware(void)
+ {
+     uint32_t routine = STACK_ARG(0);
+@@ -1776,6 +1784,7 @@
+                     waited);
+     }
+ 
++    if (firmware_observer) firmware_observer(routine);
+     xbox_HalReturnToFirmware(routine);
+ }
+ 
+--- /dev/null
++++ b/src/kernel/firmware_observer.h
+@@ -0,0 +1,8 @@
++/* Optional host observation immediately before a guest firmware return.
++ * The observer must not alter guest state or suppress termination. */
++#ifndef XBOX_FIRMWARE_OBSERVER_H
++#define XBOX_FIRMWARE_OBSERVER_H
++#include <stdint.h>
++typedef void (*xbox_firmware_observer)(uint32_t routine);
++void xbox_SetFirmwareObserver(xbox_firmware_observer observer);
++#endif

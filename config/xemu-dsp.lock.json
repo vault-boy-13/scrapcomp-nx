@@ -1,0 +1,73 @@
+{
+  "repository": "https://github.com/xemu-project/xemu",
+  "commit": "711b416840c2a528cb989621b6456a72bd02d768",
+  "raw_base": "https://raw.githubusercontent.com/xemu-project/xemu/711b416840c2a528cb989621b6456a72bd02d768/",
+  "files": [
+    {
+      "path": "dsp/interp/dsp_cpu.c",
+      "upstream": "hw/xbox/mcpx/apu/dsp/interp/dsp_cpu.c",
+      "sha256": "b2879f6895ac5b4702a3a77dbd94fc5e4517928f5ef449030d44557860833e5b",
+      "git_blob_sha1": "9e4b695bd7f1cc5a80c11896f2c190ea8ae3b83f"
+    },
+    {
+      "path": "dsp/interp/dsp_cpu.h",
+      "upstream": "hw/xbox/mcpx/apu/dsp/interp/dsp_cpu.h",
+      "sha256": "314ab9afc8a01f9ceeafd6d0cb9a3e2446b0aa7e1bede758c5d7ad2b141163cf",
+      "git_blob_sha1": "d9ee16368d6ac737a46f78a7cba335d7694525f9"
+    },
+    {
+      "path": "dsp/interp/dsp_cpu_regs.h",
+      "upstream": "hw/xbox/mcpx/apu/dsp/interp/dsp_cpu_regs.h",
+      "sha256": "5373cbe8cb5326f39cbebfbbb13a85d78b4f8d47d7ebd3e4f2291e2fcde2c926",
+      "git_blob_sha1": "0fc33d13ccaa22136090b3e0a572eabe809e7e09"
+    },
+    {
+      "path": "dsp/interp/dsp_dis.c.inc",
+      "upstream": "hw/xbox/mcpx/apu/dsp/interp/dsp_dis.c.inc",
+      "sha256": "2a624a326c7633ff8a866bea4b379ac23aef3c3768a0873bf7d85a6b3e35911d",
+      "git_blob_sha1": "f8350513a4d82f1c60d2dcffe254acf7aceb5631"
+    },
+    {
+      "path": "dsp/interp/dsp_emu.c.inc",
+      "upstream": "hw/xbox/mcpx/apu/dsp/interp/dsp_emu.c.inc",
+      "sha256": "ffc744df58e3fea9df1fd2acffe267cb4126b5ecb6c82518009bcea17fbb6e5f",
+      "git_blob_sha1": "b512707783f0e6509a2f82ca1d25fc033cb1e676"
+    },
+    {
+      "path": "dsp/dsp_dma.c",
+      "upstream": "hw/xbox/mcpx/apu/dsp/dsp_dma.c",
+      "sha256": "4a19ab8e1d53a8e58d2301f777d509fc5dbf19daa04deb194b25465ec97a9369",
+      "git_blob_sha1": "ba512f031e64beb3d2601f0ebf091996ebfd2b0e"
+    },
+    {
+      "path": "dsp/dsp_dma.h",
+      "upstream": "hw/xbox/mcpx/apu/dsp/dsp_dma.h",
+      "sha256": "117a7db6ae3b7bc7f8bf47f9dad30610dd72b0affba7ab28cdb721be3e4c6ffd",
+      "git_blob_sha1": "cbfa114cfa2f02505aa7443251612d34ae868f64"
+    },
+    {
+      "path": "dsp/dsp_dma_regs.h",
+      "upstream": "hw/xbox/mcpx/apu/dsp/dsp_dma_regs.h",
+      "sha256": "9582796ee42313de2f341356761bdef514b8a9f9962199df8881a7461b78ea62",
+      "git_blob_sha1": "a373cb7c1416b612d72ac65f8abcdaf7903d8509"
+    },
+    {
+      "path": "dsp/debug.h",
+      "upstream": "hw/xbox/mcpx/apu/dsp/debug.h",
+      "sha256": "1773c7f3b3db5318886ce48b01e42e00c94b80a8364089dc6276d6c7ed26eeef",
+      "git_blob_sha1": "5507c01f85ca00d3a801024ce4e47b6a95846322"
+    },
+    {
+      "path": "COPYING",
+      "upstream": "COPYING",
+      "sha256": "dd3ce02338c3a48abb6ba59b48809f7108a8bd242cb0cc8be90daafa30707c28",
+      "git_blob_sha1": "8095135d50d970174ab0167816e259b677f4430a"
+    },
+    {
+      "path": "COPYING.LIB",
+      "upstream": "COPYING.LIB",
+      "sha256": "31c90ce76b6f5aab90a205851e71d5c27e31c0aa3d7017a4383b98a6fe3f1faa",
+      "git_blob_sha1": "99f47575b5b0f10bd1035444d143fb0a865d8d19"
+    }
+  ]
+}

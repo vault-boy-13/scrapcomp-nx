@@ -1,0 +1,33 @@
+--- a/src/kernel/nv2a_pb_exec.c
++++ b/src/kernel/nv2a_pb_exec.c
+@@ -896,13 +896,24 @@
+ 
+ static uint32_t surface_bpp(void)
+ {
+-    /* The pitch and the clip width together give the pixel size, which is more
+-     * reliable than decoding the format field: the format's colour code is
+-     * only meaningful alongside a type the title also sets, while the pitch is
+-     * always exactly how many bytes a row occupies. */
+-    if (!s_gpu.clip_w)
++    /* SURFACE_CLIP is a scissor, not the row allocation. Deriving bpp from
++     * its width made a narrower clip resize/clear the GL target mid-frame.
++     * The NV097 colour field describes storage independently of pitch,
++     * swizzle type and AA (nv2a_regs.h: SET_SURFACE_FORMAT_COLOR). */
++    switch (s_gpu.format & 0xF) {
++    case 1: case 2: case 3: case 10: return 2;
++    case 4: case 5: case 6: case 7: case 8: return 4;
++    case 9: return 1;
++    default: {
++        static uint32_t seen;
++        uint32_t bit = 1u << (s_gpu.format & 0xF);
++        if (!(seen & bit)) {
++            seen |= bit;
++            fprintf(stderr, "  [GPU] unsupported surface colour format 0x%08X\n", s_gpu.format);
++        }
+         return 0;
+-    return s_gpu.pitch / s_gpu.clip_w;
++    }
++    }
+ }
+ 
+ 

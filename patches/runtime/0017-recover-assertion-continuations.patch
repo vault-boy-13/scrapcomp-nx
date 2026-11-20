@@ -1,0 +1,56 @@
+--- a/tools/recomp/translator.py
++++ b/tools/recomp/translator.py
+@@ -906,8 +906,18 @@
+                            sections[0].va + sections[0].va_size)
+         if next_index < len(current_starts):
+             analysis_end = min(analysis_end, current_starts[next_index])
++        raw_extent = self._read_func_bytes(target, end)
++        trap_continuations = {
++            target + index + 1 for index, byte in enumerate(raw_extent[:-1])
++            if byte == 0xCC and (
++                (target + index + 1 in actual
++                 and self.func_db[target + index + 1].get("detection_method") == "cc_boundary")
++                or (target + index + 1 not in self.func_db
++                    and raw_extent[index + 1] != 0xCC))
++        }
+         recovered = self._recover_cfg(
+-            target, analysis_end, set(), set(), coalescing=True)
++            target, analysis_end, set(), set(), coalescing=True,
++            trap_continuations=trap_continuations)
+         if recovered is None:
+             reject("could not decode CFG")
+         instructions, jump_tables, _ = recovered
+@@ -1457,7 +1467,7 @@
+         return targets
+ 
+     def _recover_cfg(self, start, upper, bridge_targets, stop_addresses,
+-                     *, coalescing=False):
++                     *, coalescing=False, trap_continuations=()):
+         """Decode direct CFG edges and local indexed-table destinations."""
+         raw_bytes = self._read_func_bytes(start, upper)
+         if not raw_bytes:
+@@ -1474,6 +1484,15 @@
+                 stop_mnemonics=stop_mnemonics)
+             changed = False
+             if coalescing:
++                conditional_targets = {insn.jump_target for insn in instructions
++                                       if insn.is_cond_jump}
++                resumes = {insn.end_address for insn in instructions
++                           if insn.mnemonic == "int3"
++                           and insn.address in conditional_targets
++                           and insn.end_address in trap_continuations}
++                if resumes - entry_points:
++                    entry_points.update(resumes)
++                    changed = True
+                 computed_jump_edges = self._computed_jump_edges(
+                     instructions, start, upper,
+                     jump_table_targets=jump_tables)
+@@ -2799,6 +2818,8 @@
+                     and (bb.last_insn.mnemonic in ("ud2", "hlt")
+                          or (bb.last_insn.mnemonic == "int3"
+                              and bb.last_insn.address not in debug_slide_int3s))):
++                if bb.last_insn.mnemonic == "int3":
++                    lines.append(f'    RECOMP_UNIMPL("int3", 0x{bb.last_insn.address:08X}u);')
+                 lines.append("    return; /* trap ends recovered control flow */")
+ 
+             lines.append(f"")

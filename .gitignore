@@ -28,6 +28,8 @@ title.keys
 /generated/
 /artifacts/
 /runs/
+# Native runtime default log when the diagnostic EXE is launched manually.
+/xbox_kernel.log
 /.cache/
 /switch_sd/
 __pycache__/

@@ -1,0 +1,53 @@
+--- a/src/apu/apu_xaudio2.c
++++ b/src/apu/apu_xaudio2.c
+@@ -57,6 +57,7 @@
+ static int16_t                 g_xa2_bufs[XA2_NUM_BUFS][XA2_BUF_SAMPLES][2];
+ static int                     g_xa2_next_buf = 0;
+ static int                     g_xa2_initialized = 0;
++static int                     g_xa2_started = 0;
+ static int                     g_xa2_frames_written = 0;
+ static Xa2Stats                g_xa2_stats;
+ 
+@@ -102,12 +103,11 @@
+         goto fail;
+     }
+ 
+-    hr = IXAudio2SourceVoice_Start(g_xa2_source, 0, XAUDIO2_COMMIT_NOW);
+-    if (FAILED(hr)) {
+-        fprintf(stderr, "[XA2] Start failed: 0x%08lX\n", hr);
+-        goto fail;
+-    }
+-
++    /* Keep the voice stopped until the producer fills its normal headroom.
++     * Starting an empty queue lets the first 256-sample block drain before
++     * the next device quantum, causing a repeatable startup gap. */
++    g_xa2_started = 0;
++    memset(&g_xa2_stats, 0, sizeof g_xa2_stats);
+     g_xa2_next_buf = 0;
+     g_xa2_initialized = 1;
+     g_xa2_frames_written = 0;
+@@ -143,6 +143,7 @@
+     if (g_xa2_initialized)
+         fprintf(stderr, "[XA2] Shut down (%d frames written)\n", g_xa2_frames_written);
+     g_xa2_initialized = 0;
++    g_xa2_started = 0;
+ }
+ 
+ int xa2_is_active(void)
+@@ -201,6 +202,16 @@
+ 
+     hr = IXAudio2SourceVoice_SubmitSourceBuffer(g_xa2_source, &xbuf, NULL);
+     if (FAILED(hr)) return 0;
++
++    if (!g_xa2_started && state.BuffersQueued + 1 >= (UINT32)xa2_queue_target()) {
++        hr = IXAudio2SourceVoice_Start(g_xa2_source, 0, XAUDIO2_COMMIT_NOW);
++        if (FAILED(hr)) {
++            fprintf(stderr, "[XA2] Start failed after queue priming: 0x%08lX\n", hr);
++            xa2_shutdown();
++            return 0;
++        }
++        g_xa2_started = 1;
++    }
+ 
+     g_xa2_next_buf = (idx + 1) % XA2_NUM_BUFS;
+     g_xa2_frames_written++;

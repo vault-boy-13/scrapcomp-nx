@@ -1,0 +1,104 @@
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -1580,6 +1580,8 @@
+             return ["esp = ebp;", "POP32(esp, ebp); /* leave */"]
+         if m in ("cld", "std"):
+             return [f"g_df = {0 if m == 'cld' else 1}; /* {m} */"]
++        if m in ("cli", "sti"):
++            return [f"recomp_{m}(); /* guest interrupt flag */"]
+         if m == "lahf":
+             return ["/* lahf - load AH from flags (used in FPU compare idiom) */"]
+         if m == "sahf":
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -330,6 +330,9 @@
+  * memmove's overlapping case is the same instruction and the same bug.
+  */
+ extern RECOMP_TLS int g_df;
++void recomp_cli(void);
++void recomp_sti(void);
++int recomp_interrupts_enabled(void);
+ #define RECOMP_DF_STEP(n) (g_df ? -(int32_t)(n) : (int32_t)(n))
+ 
+ /* x87 control and status. Thread-local for the same reason the x87 stack
+--- a/src/kernel/kernel_hal.c
++++ b/src/kernel/kernel_hal.c
+@@ -38,6 +38,8 @@
+  * ============================================================================ */
+ 
+ static XBOX_THREAD_LOCAL KIRQL g_current_irql = PASSIVE_LEVEL;
++static XBOX_THREAD_LOCAL int t_cli_held;
++static volatile LONG g_cli_masked_count;
+ 
+ /* How many threads are holding IRQL at or above DISPATCH_LEVEL.
+  *
+@@ -59,7 +61,8 @@
+  * so a deferred interrupt is delivered on the next poll rather than lost. */
+ int xbox_IrqlBlocksInterrupts(void)
+ {
+-    return InterlockedCompareExchange(&g_irql_raised_count, 0, 0) != 0;
++    return InterlockedCompareExchange(&g_irql_raised_count, 0, 0) != 0
++        || InterlockedCompareExchange(&g_cli_masked_count, 0, 0) != 0;
+ }
+ 
+ /* The raw depth, for callers that want to report it. A count that only ever
+@@ -198,10 +201,39 @@
+ #else
+ static _Thread_local int t_dispatch_held;
+ #endif
+-int xbox_thread_holds_dispatch(void) { return t_dispatch_held; }
++int xbox_thread_holds_dispatch(void) { return t_dispatch_held || t_cli_held; }
+ 
+ int  xbox_gil_suspend(void);
+ void xbox_gil_resume(int depth);
++
++/* CLI/STI change IF, not IRQL. Hold an additional recursive dispatch-lock
++ * acquisition so a pending ISR/DPC cannot enter the guest while IF is clear.
++ * Resolve contention before clearing IF: a worker may already own dispatch
++ * while waiting for the guest execution lock. Repeated CLI is idempotent.
++ * STI opens the gate without dispatching synchronously inside the instruction;
++ * guest execution continues to its next scheduling boundary. */
++int recomp_interrupts_enabled(void) { return !t_cli_held; }
++
++void recomp_cli(void)
++{
++    if (t_cli_held) return;
++    InitOnceExecuteOnce(&g_dispatch_once, dispatch_lock_init, NULL, NULL);
++    if (!TryEnterCriticalSection(&g_dispatch_lock)) {
++        int gil = xbox_gil_suspend();
++        EnterCriticalSection(&g_dispatch_lock);
++        xbox_gil_resume(gil);
++    }
++    t_cli_held = 1;
++    InterlockedIncrement(&g_cli_masked_count);
++}
++
++void recomp_sti(void)
++{
++    if (!t_cli_held) return;
++    t_cli_held = 0;
++    InterlockedDecrement(&g_cli_masked_count);
++    LeaveCriticalSection(&g_dispatch_lock);
++}
+ 
+ static void irql_transition(KIRQL from, KIRQL to)
+ {
+--- a/src/kernel/kernel_bridge.c
++++ b/src/kernel/kernel_bridge.c
+@@ -605,6 +605,7 @@
+ volatile int g_gil_contended;
+ static RECOMP_TLS int t_gil_nopreempt;      /* inside an ISR or DPC */
+ int xbox_thread_holds_dispatch(void);     /* kernel_hal.c */
++int recomp_interrupts_enabled(void);      /* kernel_hal.c: guest IF */
+ 
+ /* RECOMP_GIL_EAGER=1: hand the lock over by guest priority, the way the
+  * Xbox's scheduler would, instead of FIFO with a 1 ms grace.
+@@ -728,6 +729,8 @@
+ int xbox_gil_suspend(void)
+ {
+     int d = t_gil_depth;
++    if (!recomp_interrupts_enabled())
++        return 0;                        /* CLI keeps this CPU's guest context */
+     if (d > 0 && gil_enabled()) {
+         t_gil_depth = 0;
+         gil_unlock();

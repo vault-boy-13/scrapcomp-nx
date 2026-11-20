@@ -1,0 +1,41 @@
+--- a/tools/recomp/mmio_rewrite.py
++++ b/tools/recomp/mmio_rewrite.py
+@@ -72,7 +72,7 @@
+ def rewrite(code):
+     """Rewrite every memory access in `code` to its device-aware form."""
+     return _DEV_NAMES.sub(lambda m: {"XBOX_PTR": "XBOX_DEV_PTR("}.get(
+-        m.group(1), "DEV_" + m.group(1) + "("), _rewrite_mem(code))
++        m.group(1), "DEV_" + m.group(1) + "("), _rewrite_mem(_rewrite_blocks(code)))
+ 
+ 
+ def _rewrite_mem(code):
+@@ -109,3 +109,29 @@
+             read = f"(({_SIGNED[bits]}){read})"
+         out.append(read)
+         pos = args_end
++
++
++_REP_BLOCK = re.compile(
++    r"(if \(!g_df\) \{ uint8_t \*_d = \(uint8_t\*\)XBOX_PTR\(edi\),"
++    r"\s*\*_s = \(uint8_t\*\)XBOX_PTR\(esi\); uint32_t _n = ecx"
++    r"(?P<scale> \* [24])?;\s*)")
++
++
++def _rewrite_blocks(code):
++    """Keep RAM memcpy fast paths; route each actual MMIO bus element."""
++    def move(match):
++        width = int(match.group('scale')[-1]) if match.group('scale') else 1
++        bits = width * 8
++        return (match.group(0) +
++            "if (XBOX_IS_MMIO(esi) || XBOX_IS_MMIO(edi) || "
++            "(uint64_t)esi + _n > XBOX_MMIO_BASE || "
++            "(uint64_t)edi + _n > XBOX_MMIO_BASE) { "
++            f"uint32_t _i; for (_i=0; _i<ecx; ++_i) "
++            f"MEM{bits}(edi + _i*{width}) = MEM{bits}(esi + _i*{width}); "
++            "} else ")
++    code = _REP_BLOCK.sub(move, code)
++    return code.replace(
++        "memset((void*)XBOX_PTR(edi), (uint8_t)eax, ecx);",
++        "if (XBOX_IS_MMIO(edi) || (uint64_t)edi + ecx > XBOX_MMIO_BASE) "
++        "{ uint32_t _i; for (_i=0; _i<ecx; ++_i) MEM8(edi+_i) = (uint8_t)eax; } "
++        "else memset((void*)XBOX_PTR(edi), (uint8_t)eax, ecx);")

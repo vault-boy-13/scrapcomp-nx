@@ -1,0 +1,334 @@
+--- a/tools/recomp/translator.py
++++ b/tools/recomp/translator.py
+@@ -634,7 +634,7 @@
+         raise ValueError(f"{path}: expected an array of coalescence entries")
+     parsed = []
+     for entry in entries:
+-        if (not isinstance(entry, dict) or set(entry) != fields
++        if (not isinstance(entry, dict) or (not fields.issubset(entry) or set(entry) - fields - {"local_aliases", "retained_entries"})
+                 or not isinstance(entry["coalesce_starts"], list)):
+             raise ValueError(f"{path}: expected start, end and coalesce_starts")
+         parsed.append({
+@@ -642,6 +642,11 @@
+             "end": address(entry["end"]),
+             "coalesce_starts": [address(item) for item in entry["coalesce_starts"]],
+         })
++        for option in ("local_aliases", "retained_entries"):
++            if option in entry:
++                if not isinstance(entry[option], list):
++                    raise ValueError(f"{path}: {option} must be an array")
++                parsed[-1][option] = [address(item) for item in entry[option]]
+     return parsed
+ 
+ 
+@@ -713,6 +718,7 @@
+         self.abi_db = abi_db or {}
+         self.trace_functions = set(trace_functions or ())
+         self.force_returns = dict(force_returns or {})
++        self.retained_entry_owners = {}
+         self.disasm = Disassembler()
+         self.lifter = Lifter(func_db=func_db, label_db=label_db, abi_db=abi_db,
+                              xbe_data=xbe_data, seh_prolog=seh_prolog,
+@@ -824,7 +830,7 @@
+ 
+         return self.recovered_function_starts
+ 
+-    def coalesce_function(self, target, end, expected_starts):
++    def coalesce_function(self, target, end, expected_starts, local_aliases=(), retained_entries=()):
+         """Merge an explicitly named set of false interior function starts.
+ 
+         A false split can lose flags or turn a back-edge into host recursion.
+@@ -873,8 +879,17 @@
+         if protected:
+             reject(
+                 f"interior start 0x{protected[0]:08X} is protected by manual code")
++        from .local_alias import validate_local_aliases, validate_local_jumps
++        try:
++            from .retained_entry import validate_retained_entries
++            retained = validate_retained_entries(self, actual, retained_entries, local_aliases)
++            local_aliases = validate_local_aliases(
++                self, target, end, actual, local_aliases)
++        except ValueError as error:
++            reject(str(error))
+         strong = [start for start in actual
+-                  if self._is_strong_entry(self.func_db[start], start)]
++                  if self._is_strong_entry(self.func_db[start], start)
++                  and start not in local_aliases and start not in retained]
+         if strong:
+             reject(
+                 f"interior start 0x{strong[0]:08X} has independent evidence")
+@@ -970,9 +985,19 @@
+                 f"CFG covers through 0x{covered_end:08X}, not the requested "
+                 "end")
+ 
++        try:
++            validate_local_jumps(local_aliases, instructions)
++            from .retained_entry import validate_retained_cfg
++            validate_retained_cfg(retained, instructions)
++        except ValueError as error:
++            reject(str(error))
+         existing = self.func_db[target]
+         original_end = existing.get("end", target)
+         for start in actual:
++            if start in retained:
++                self.retained_entry_owners[start] = target
++                self.coalesced_function_starts.add(start)
++                continue
+             del self.func_db[start]
+             self._recovered_cfg.pop(start, None)
+             self.owned_function_starts.discard(start)
+@@ -995,7 +1020,9 @@
+         print(
+             f"Coalesced detected function 0x{target:08X} from "
+             f"0x{original_end:08X} to 0x{end:08X}, removing "
+-            f"{len(actual)} false interior starts "
++            f"{len(actual) - len(retained)} false interior starts "
++            + (f"and retaining {len(retained)} entry points " if retained else "")
++            +
+             f"({len(instructions)} instructions)",
+             file=sys.stderr)
+ 
+@@ -2224,6 +2251,8 @@
+ 
+         switch_leaders = set(computed_entries)
+         switch_leaders.update(debug_slide_bypasses.values())
++        switch_leaders.update(entry for entry, owner in self.retained_entry_owners.items()
++                              if owner == start)
+         if coalesced:
+             instruction_starts = {insn.address for insn in instructions}
+             switch_leaders.update(
+@@ -2331,6 +2360,10 @@
+         Returns a string of C source code, or None on failure.
+         """
+         start = func_addr
++        if start in self.retained_entry_owners:
++            from .retained_entry import entry_wrapper
++            name = _func_ident(start, func_info.get("name", f"sub_{start:08X}"))
++            return entry_wrapper(name, self.retained_entry_owners[start], start)
+         recovered = self._recovered_cfg.get(start)
+         end = recovered["end"] if recovered else func_info.get("end")
+         if not end:
+@@ -2855,7 +2888,9 @@
+         lines.append(f"}}")
+         lines.append(f"")
+ 
+-        return "\n".join(lines)
++        from .retained_entry import shared_body
++        retained = {entry for entry, owner in self.retained_entry_owners.items() if owner == start}
++        return shared_body("\n".join(lines), name, start, retained)
+ 
+     def _find_used_registers(self, instructions):
+         """Find which 32-bit registers are referenced by any instruction."""
+@@ -2971,7 +3006,9 @@
+             for path in coalesce_json_paths:
+                 for entry in load_coalescences(path):
+                     self.translator.coalesce_function(
+-                        entry["start"], entry["end"], entry["coalesce_starts"])
++                        entry["start"], entry["end"], entry["coalesce_starts"],
++                        local_aliases=entry.get("local_aliases", ()),
++                        retained_entries=entry.get("retained_entries", ()))
+                     self.translator.discover_static_indirect_targets(
+                         coalescing=True)
+ 
+--- /dev/null
++++ b/tools/recomp/local_alias.py
+@@ -0,0 +1,60 @@
++"""Conservative opt-in proof for tail aliases caused by an owner's split loop."""
++import struct
++from . import config
++from .non_pointer import has_absolute_reference
++
++
++def validate_local_aliases(subject, target, end, actual, aliases):
++    aliases = list(aliases)
++    if aliases != sorted(set(aliases)) or not set(aliases).issubset(actual):
++        raise ValueError("local_aliases must be sorted unique interior starts")
++    for alias in aliases:
++        info = subject.func_db[alias]
++        if (info.get("detection_method") != "tail_jump_alias"
++                or info.get("called_by") or info.get("has_prologue")
++                or info.get("external_entry")
++                or alias in subject.protected_function_starts
++                or alias in subject.coalesced_function_starts):
++            raise ValueError(f"local alias 0x{alias:08X} has independent evidence")
++        if has_absolute_reference(subject, alias, target, end):
++            raise ValueError(f"local alias 0x{alias:08X} has an absolute reference")
++    if not aliases:
++        return set()
++    selected = set(aliases)
++    # Examine every code byte, including currently undiscovered functions.
++    # A false-positive opcode inside an immediate rejects the proposal;
++    # it must never justify discarding a possible external entry.
++    forms = [(op, 5, 1, 4) for op in (0xE8, 0xE9)]
++    forms += [(op, 2, 1, 1) for op in (0xEB, *range(0x70, 0x80), *range(0xE0, 0xE4))]
++    forms += [(0x0F, 6, 2, 4)]
++    for section in config._SECTIONS:
++        if not section.is_code:
++            continue
++        raw = subject.xbe_data[section.raw_addr:section.raw_addr + section.raw_size]
++        for opcode, length, displacement_offset, width in forms:
++            cursor = 0
++            while True:
++                index = raw.find(bytes([opcode]), cursor)
++                if index < 0:
++                    break
++                cursor = index + 1
++                if index + length > len(raw):
++                    continue
++                if opcode == 0x0F and not 0x80 <= raw[index + 1] <= 0x8F:
++                    continue
++                source = section.va + index
++                displacement = int.from_bytes(
++                    raw[index + displacement_offset:index + displacement_offset + width],
++                    "little", signed=True)
++                destination = (source + length + displacement) & 0xFFFFFFFF
++                if destination in selected and (opcode == 0xE8 or not target <= source < end):
++                    raise ValueError(
++                        f"local alias 0x{destination:08X} has a possible external/call reference at 0x{source:08X}")
++    return selected
++
++
++def validate_local_jumps(aliases, instructions):
++    targets = {instruction.jump_target for instruction in instructions
++               if instruction.is_branch}
++    if not aliases.issubset(targets):
++        raise ValueError("local alias lacks a decoded owner jump")
+--- /dev/null
++++ b/tools/recomp/non_pointer.py
+@@ -0,0 +1,57 @@
++"""Classify raw address bytes only inside independently reached instructions."""
++import struct
++from . import config
++from .disasm import Disassembler
++
++
++def has_absolute_reference(subject, alias, recovery_start, recovery_end):
++    needle = struct.pack('<I', alias)
++    offset = 0
++    while True:
++        offset = subject.xbe_data.find(needle, offset)
++        if offset < 0:
++            return False
++        occurrence = offset
++        offset += 1
++        sections = [s for s in config._SECTIONS if s.is_code
++                    and s.raw_addr <= occurrence
++                    and occurrence + 4 <= s.raw_addr + s.raw_size]
++        if len(sections) != 1:
++            return True
++        section = sections[0]
++        va = section.va + occurrence - section.raw_addr
++        owners = [(a, info) for a, info in subject.func_db.items()
++                  if a <= va and va + 4 <= info.get('end', a)
++                  and (info.get('detection_method') == 'call_target'
++                       or (info.get('detection_method') == 'prologue'
++                           and info.get('has_prologue')))
++                  and info.get('called_by')
++                  and (info.get('end', a) <= recovery_start or a >= recovery_end)]
++        if len(owners) != 1:
++            return True
++        start, info = owners[0]
++        end = info['end']
++        if not section.va <= start < end <= section.va + section.raw_size:
++            return True
++        if end - start > 65536:
++            return True
++        begin = section.raw_addr + start - section.va
++        # A separately called frame-prologue root is independent evidence too,
++        # but verify the original PUSH EBP/MOV EBP,ESP bytes in addition to
++        # metadata. Weak, uncalled and speculative roots remain disallowed.
++        if info.get('detection_method') == 'prologue' and subject.xbe_data[begin:begin+3] not in (
++                b'\x55\x8B\xEC', b'\x55\x89\xE5'):
++            return True
++        instructions = Disassembler().disassemble_cfg(
++            subject.xbe_data[begin:begin + end - start], start, end, [start])
++        containing = [i for i in instructions if i.address <= va and va + 4 <= i.end_address]
++        if len(containing) != 1:
++            return True
++        instruction = containing[0]
++        # A genuine immediate/absolute displacement still rejects recovery.
++        # Only unrelated opcode/ModRM/relative-displacement byte collisions
++        # can pass. Data, undecoded gaps and cross-instruction matches fail.
++        if alias in instruction.imm_values or alias in instruction.memory_refs:
++            return True
++        if any(op.type == 'mem' and op.mem_disp == alias for op in instruction.operands):
++            return True
+--- /dev/null
++++ b/tools/recomp/retained_entry.py
+@@ -0,0 +1,76 @@
++"""Preserve a secondary guest entry while sharing the complete owner CFG."""
++
++
++def validate_retained_entries(subject, actual, entries, local_aliases):
++    entries = list(entries)
++    if entries != sorted(set(entries)) or not set(entries).issubset(actual):
++        raise ValueError('retained_entries must be sorted unique interior starts')
++    if set(entries).intersection(local_aliases):
++        raise ValueError('a retained entry cannot also be removed as a local alias')
++    for entry in entries:
++        info = subject.func_db[entry]
++        if (info.get('detection_method') not in {'tail_jump_alias', 'imm_ref_target'}
++                or info.get('has_prologue')):
++            raise ValueError('retained entry must be a secondary tail entry without its own prologue')
++    return set(entries)
++
++
++def validate_retained_cfg(entries, instructions):
++    by_address = {i.address: i for i in instructions}
++    if not entries.issubset(by_address):
++        raise ValueError('retained entry is not an instruction in the proven owner CFG')
++    from .translator import _FLAG_READERS
++    # The incoming EFLAGS snapshot is not represented in this donor ABI.
++    # Reject an entry that observes it. Full flag writers or a normal call
++    # establish the same boundary used by the donor's recovered-arm check.
++    writers = {'cmp', 'test', 'and', 'or', 'xor', 'add', 'sub', 'neg',
++               'comiss', 'ucomiss', 'comisd', 'ucomisd',
++               'fcomi', 'fcomip', 'fcompi', 'fucomi', 'fucomip', 'fucompi'}
++    for entry in entries:
++        pending = [entry]
++        seen = set()
++        while pending:
++            pc = pending.pop()
++            if pc in seen:
++                continue
++            seen.add(pc)
++            ins = by_address.get(pc)
++            if ins is None:
++                raise ValueError('retained entry leaves the proven CFG before defining flags')
++            if (ins.mnemonic in _FLAG_READERS or ins.is_cond_jump
++                    or ins.mnemonic.startswith(('set', 'cmov', 'fcmov'))):
++                raise ValueError('retained entry requires unrepresented incoming flags')
++            if ins.mnemonic in writers or ins.is_call or ins.is_ret:
++                continue
++            if ins.is_jump:
++                if ins.jump_target is None:
++                    raise ValueError('retained entry has an unproved initial indirect jump')
++                pending.append(ins.jump_target)
++            else:
++                pending.append(ins.end_address)
++
++
++def entry_wrapper(name, owner, entry):
++    helper = f'recomp_shared_{owner:08X}'
++    return (f'extern void {helper}(uint32_t entry);\n'
++            f'void {name}(void) {{ {helper}(0x{entry:08X}u); }}\n')
++
++
++def shared_body(code, name, owner, entries):
++    if not entries:
++        return code
++    helper = f'recomp_shared_{owner:08X}'
++    signature = f'void {name}(void)'
++    if code.count(signature) != 1:
++        raise ValueError('unexpected owner signature while retaining entries')
++    code = code.replace(signature, f'void {helper}(uint32_t _entry)', 1)
++    label = f'loc_{owner:08X}: ;'
++    dispatch = []
++    for entry in sorted(entries):
++        if f'loc_{entry:08X}: ;' not in code:
++            raise ValueError('retained entry label is absent from generated owner')
++        dispatch.append(f'    if (_entry == 0x{entry:08X}u) goto loc_{entry:08X};')
++    if code.count(label) != 1:
++        raise ValueError('owner label is absent while retaining entries')
++    code = code.replace(label, '\n'.join(dispatch) + '\n' + label, 1)
++    return code + '\n' + entry_wrapper(name, owner, owner)

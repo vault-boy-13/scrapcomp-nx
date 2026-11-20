@@ -1,0 +1,80 @@
+--- a/src/apu/apu_core.c
++++ b/src/apu/apu_core.c
+@@ -644,6 +644,10 @@
+     memset(d->regs, 0, sizeof(d->regs));
+     mcpx_apu_vp_reset(d);
+ 
++#ifdef XBOXRECOMP_REAL_DSP
++    dsp_reset(d->gp.dsp);
++    dsp_reset(d->ep.dsp);
++#else
+     if (d->gp.dsp) {
+         memset((void *)d->gp.dsp->core.pram_opcache, 0,
+                sizeof(d->gp.dsp->core.pram_opcache));
+@@ -652,6 +656,7 @@
+         memset((void *)d->ep.dsp->core.pram_opcache, 0,
+                sizeof(d->ep.dsp->core.pram_opcache));
+     }
++#endif
+     d->set_irq = false;
+ }
+ 
+@@ -726,6 +731,10 @@
+     qemu_thread_join(&d->apu_thread);
+     mcpx_apu_vp_finalize(d);
+     mcpx_apu_monitor_finalize(d);
++#ifdef XBOXRECOMP_REAL_DSP
++    dsp_destroy(d->gp.dsp);
++    dsp_destroy(d->ep.dsp);
++#endif
+ 
+     free(d);
+     g_state = NULL;
+@@ -759,7 +768,12 @@
+             mcpx_apu_write(d, addr, val, size);
+         }
+     }
+-    /* GP (0x30000) and EP (0x50000) regions ignored for now */
++#ifdef XBOXRECOMP_REAL_DSP
++    else if (is_write && addr >= 0x30000 && addr < 0x40000)
++        scrap_gp_write(d,(uint32_t)addr-0x30000,(uint32_t)val,size);
++    else if (is_write && addr >= 0x50000 && addr < 0x60000)
++        scrap_ep_write(d,(uint32_t)addr-0x50000,(uint32_t)val,size);
++#endif
+ }
+ 
+ /* ============================================================
+@@ -775,6 +789,12 @@
+     } else if (addr < 0x20000) {
+         return mcpx_apu_read(d, (hwaddr)addr, size);
+     }
++#ifdef XBOXRECOMP_REAL_DSP
++    else if (addr >= 0x30000 && addr < 0x40000)
++        return scrap_gp_read(d,(uint32_t)addr-0x30000,size);
++    else if (addr >= 0x50000 && addr < 0x60000)
++        return scrap_ep_read(d,(uint32_t)addr-0x50000,size);
++#endif
+     return 0;
+ }
+ 
+--- a/src/apu/apu_state.h
++++ b/src/apu/apu_state.h
+@@ -25,6 +25,9 @@
+ #include "apu_regs.h"
+ #include "apu_debug.h"
+ 
++#ifdef XBOXRECOMP_REAL_DSP
++#include "scrap_dsp_state.h"
++#else
+ /* ============================================================
+  * DSP CPU registers
+  * ============================================================ */
+@@ -137,6 +140,8 @@
+     uint32_t interrupts;
+     bool is_gp;
+ } DSPState;
++
++#endif
+ 
+ /* ============================================================
+  * SVF (State Variable Filter) - from vp/svf.h

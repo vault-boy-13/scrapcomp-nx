@@ -1,0 +1,89 @@
+--- a/src/apu/apu_core.c
++++ b/src/apu/apu_core.c
+@@ -294,12 +294,8 @@
+             g_waveout.frames_written);
+ }
+ 
+-void mcpx_apu_monitor_frame(MCPXAPUState *d)
+-{
+-    if ((d->ep_frame_div + 1) % 8) {
+-        return;
+-    }
+-
++static void monitor_output_block(MCPXAPUState *d)
++{
+     /* XAudio2 path: one block per 8 EP frames.
+      *
+      * The DSP stage has just written this block's 256 samples (8 frames x 32)
+@@ -388,6 +384,23 @@
+ 
+     g_waveout.next_buf = (idx + 1) % WAVEOUT_NUM_BUFS;
+     g_waveout.frames_written++;
++}
++
++void mcpx_apu_monitor_frame(MCPXAPUState *d)
++{
++    if ((d->ep_frame_div + 1) % 8 == 0)
++        monitor_output_block(d);
++}
++
++/* Keep the host device/mixer clock alive while the hardware pipeline is off,
++ * without advancing GP/EP phase or destroying a partially produced block. */
++static void monitor_software_frame(MCPXAPUState *d)
++{
++    int16_t saved[256][2];
++    memcpy(saved, d->monitor.frame_buf, sizeof(saved));
++    memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
++    monitor_output_block(d);
++    memcpy(d->monitor.frame_buf, saved, sizeof(saved));
+ }
+ 
+ /* ============================================================
+@@ -418,9 +431,9 @@
+     return n;
+ }
+ 
+-static void throttle(MCPXAPUState *d)
+-{
+-    if (d->ep_frame_div % 8) {
++static void throttle(MCPXAPUState *d, unsigned frame_div)
++{
++    if (frame_div % 8) {
+         return;
+     }
+ 
+@@ -556,6 +569,7 @@
+ static void *mcpx_apu_frame_thread(void *arg)
+ {
+     MCPXAPUState *d = MCPX_APU_DEVICE(arg);
++    unsigned output_frame_div = 0;
+     /* Audio misses are audible, a late game frame is not: stay ahead of the
+      * game's busy threads for the few microseconds a block takes. */
+     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+@@ -602,19 +616,21 @@
+         /* Always run the audio output loop — the software mixer and test tone
+          * need continuous frame delivery regardless of APU register state.
+          * The VP/DSP pipeline (se_frame) only runs when registers allow it. */
+-        throttle(d);
+-
+         bool apu_active = (xcntmode != NV_PAPU_SECTL_XCNTMODE_OFF) &&
+                           !(fectl & NV_PAPU_FECTL_FEMETHMODE_TRAPPED) &&
+                           !(fectl & NV_PAPU_FECTL_FEMETHMODE_HALTED);
++
++        throttle(d, apu_active && !g_test_tone.active ?
++                    (unsigned)d->ep_frame_div : output_frame_div);
+ 
+         if (apu_active && !g_test_tone.active) {
+             /* Full pipeline: VP voices → DSP → monitor → waveOut */
+             se_frame(d);
+         } else {
+-            /* Lightweight: just monitor frame (test tone + software mixer) */
+-            mcpx_apu_monitor_frame(d);
+-            d->ep_frame_div++;
++            /* Host output has its own clock. Inactive time must not shift
++             * the guest DSP phase after bootstrap/reset. */
++            if (++output_frame_div % 8 == 0)
++                monitor_software_frame(d);
+         }
+ 
+         /* Hand the lock to a waiting guest thread (mcpx_apu_lock_guest). */

@@ -1,1 +1,103 @@
-[]
+[
+  {
+    "start": "0x00336378",
+    "evidence": "Reached by the direct tail jump at 0x00337044 during XPP initialization; runs/host/20261119T131013.442933Z",
+    "reason": "Independent stack-frame prologue and ret 8 epilogue through 0x003363F1; prior imm_ref_target record starts in data and overlaps this entry"
+  },
+  {
+    "start": "0x00336FB6",
+    "evidence": "Reached indirect call from XPP initializer 0x00336378; table slot 0x0033625C -> object 0x00336360 -> method at +4; runs/host/20261119T131658.380502Z",
+    "reason": "Decoded callback through ret 4 at 0x0033701F; exact end 0x00337022"
+  },
+  {
+    "start": "0x0024BD80",
+    "evidence": "Reached indirect target in runs/host/20261119T160356.413139Z; callback argument 4 of array construction helper 0x000115C0 at call site 0x0024C222",
+    "reason": "Independent constructor in Animacion.cpp; decoded entry through ret at 0x0024BDAE, separated by INT3 padding from preceding code"
+  },
+  {
+    "start": "0x002393E0",
+    "evidence": "Same verified array construction helper, callback argument 4 at direct call site 0x00239DD7; adjacent stack arguments are element count, size 0x2EC and allocation pointer",
+    "reason": "Independent constructor separated by alignment padding; previous function record incorrectly spans its entry; static evidence only, not yet runtime coverage"
+  },
+  {
+    "start": "0x002A47E0",
+    "evidence": "Reached from D3D state dispatcher 0x002A4042, state 0x89, table slot 0x002B324C; runs/host/20261119T164222.133669Z",
+    "reason": "Independent setter directly after preceding ret 4, no alignment padding; decodes through ret 4 at 0x002A481E"
+  },
+  {
+    "start": "0x002A5650",
+    "evidence": "Same D3D state dispatch table 0x002B3248..0x002B32C0 (states 0x88..0xA5), slot 0x002B32A0, state 0x9E; other 28 entries already detected",
+    "reason": "Independent setter immediately after preceding ret 4, no alignment padding; static callback evidence, runtime coverage not claimed"
+  },
+  {
+    "start": "0x00338316",
+    "evidence": "Reached XPP device-add callback in runs/host/20261119T165625.004084Z from 0x0033977C; driver records 0x00336318 and 0x00336330 store it at +8",
+    "reason": "Independent callback through ret 4 at 0x00338467; starts immediately after preceding function extent"
+  },
+  {
+    "start": "0x00337CF7",
+    "evidence": "Remove callback at +12 of the same XPP driver records 0x00336318/0x00336330, next to runtime-confirmed add callback 0x00338316",
+    "reason": "Independent callback through ret 4 at 0x00337D2F; static evidence only"
+  },
+  {
+    "start": "0x0033C40F",
+    "evidence": "Device-add callback at +8 of XPP driver record 0x00336360; same record layout used by runtime-confirmed driver records 0x00336318/0x00336330",
+    "reason": "Independent callback through ret 4 at 0x0033C4EE; remove callback 0x0033BDF8 already detected; static evidence only"
+  },
+  {
+    "start": "0x003378B1",
+    "evidence": "Reached from XPP open-device path 0x00338296 in runs/host/20261119T172247.068136Z; configuration record 0x003362A4 contains this callback at +0x24",
+    "reason": "Independent input-report conversion callback, normal ret at 0x00337902 or tail jump to 0x0018B9DF; previous detected extent ended at this entry"
+  },
+  {
+    "start": "0x00337903",
+    "evidence": "Adjacent XPP configuration record 0x003362EC has same layout, callback +0x24 at 0x00336310; counterpart to runtime-confirmed record 0x003362A4",
+    "reason": "Independent input-report callback through tail jump at 0x00337922 to 0x0018B9DF; static evidence only"
+  },
+  {
+    "start": "0x00240B20",
+    "evidence": "Reached indirect target in runs/host/20261120T020936.422872Z; comparator argument4 of verified cdecl qsort helper0x17D110 at call0x240BBE",
+    "reason": "Independent aligned comparator, follows INT3 padding after terminating error path; decoded through ret at0x240B60, exactend0x240B61"
+  },
+  {
+    "start": "0x001FEA60",
+    "evidence": "Comparator argument4 of the same verified qsort0x17D110 at call0x1FF11C; static evidence only",
+    "reason": "Independent SSE float comparator after padding and terminating error path; both branches return through0x1FEA80, exactend0x1FEA81"
+  },
+  {
+    "start": "0x002461F0",
+    "evidence": "Comparator argument4 of qsort0x17D110 at call0x247AD6; static evidence only",
+    "reason": "Independent pointer/name comparator after INT3 padding; balanced EBX/EBP/EDI saves and return0x246298, exactend0x246299"
+  },
+  {
+    "start": "0x002035E0",
+    "evidence": "Reached indirect method in runs/host/20261120T021750.898752Z; observed vtable0x37443C slot+8 at0x374444; other slots already detected",
+    "reason": "Independent thiscall method immediately after prior ret16 at0x2035DD; full bounded CFG returns ret8 at0x2037A1, exactend0x2037A4"
+  },
+  {
+    "start": "0x0013B620",
+    "evidence": "Static slot0x35d1a0 of table0x35d048, stored by independently called constructor0x132400 at0x13240b; runtime coverage not claimed",
+    "reason": "Independent RET/INT3 boundary, bounded reachable CFG without traps; decoded end0x13b75e"
+  },
+  {
+    "start": "0x0015C730",
+    "evidence": "Static slot0x361b5c of table0x361ae8, stored by independently called constructor0x1571a0 at0x1571b9; runtime coverage not claimed",
+    "reason": "Independent RET/INT3 boundary, bounded reachable CFG without traps; decoded end0x15ccd5"
+  },
+  {
+    "start": "0x00171FA0",
+    "evidence": "Static slot0x366a70 of table0x366968, stored by independently called constructor0x171c50 at0x171c5f; runtime coverage not claimed",
+    "reason": "Independent RET/INT3 boundary, bounded reachable CFG without traps; decoded end0x172129"
+  },
+  {
+    "start": "0x0024EE40",
+    "evidence": "Static slot0x37d424 of table0x37d40c, stored by independently called constructor0x24ef90 at0x24ef9a; runtime coverage not claimed",
+    "reason": "Independent RET/INT3 boundary, bounded reachable CFG without traps; decoded end0x24ef84"
+  },
+  {
+    "start": "0x00146A10",
+    "observed": true,
+    "evidence": "Reached indirect call in run20261120T031909.395238Z; actual object vtable0x35FB10 slot+0xF0 at0x35FC00",
+    "reason": "Independent method after complete prior switch table: RET1469E9, alignment1469EA, six DWORD targets1469EC..146A04 and twelve byte indices146A04..146A10. Bounded CFG ends146A8B with RET4."
+  }
+]

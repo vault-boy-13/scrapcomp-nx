@@ -1,0 +1,15 @@
+--- a/tools/recomp/lifter.py
++++ b/tools/recomp/lifter.py
+@@ -1788,6 +1788,12 @@
+     def _lift_mov(self, insn, ops):
+         if nops := len(ops) < 2:
+             return [f"/* mov: bad operands */"]
++        # Control/debug/test registers require privileged CPU semantics.
++        # A raw C identifier such as cr2 neither compiles nor models a value.
++        if any(op.type == 'reg' and op.reg and
++               op.reg[:2] in ('cr', 'dr', 'tr') and op.reg[2:].isdigit()
++               for op in ops):
++            return self._unimplemented(insn, 'mov')
+         src = _fmt_operand_read(ops[1])
+         out = [_fmt_operand_write(ops[0], src)]
+         # `mov ebp, esp` establishes this function's frame. Publish it, because

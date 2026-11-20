@@ -13,7 +13,7 @@ from tools.xbe_parser.xbe_parser import XBEParser, export_json
 from tools.disasm.disasm import Disassembler
 from tools.disasm import config as disasm_config
 
-image_config = json.loads((ROOT / 'config/scrapland/image.json').read_text())
+image_config = json.loads((ROOT / 'config/scrapland/image.json').read_text(encoding='utf-8'))
 xbe = ROOT / image_config['path']
 base = ROOT / 'generated' / image_config['sha256'][:16] / 'analysis'
 base.mkdir(parents=True, exist_ok=True)
@@ -34,13 +34,16 @@ class ScraplandDisassembler(Disassembler):
 
 
 disasm_config.configure_from_xbe(str(xbe))
-seeds = json.loads((ROOT / 'config/scrapland/seed_functions.json').read_text())
+seeds = json.loads((ROOT / 'config/scrapland/seed_functions.json').read_text(encoding='utf-8'))
 seed_addresses = [int(item['start'], 0) for item in seeds]
+observed_addresses = {int(item['start'], 0) for item in seeds if item.get('observed') is True}
+analysis_inputs = {'image': image_config, 'seeds': seeds}
 previous_manifest = base / 'input-manifest.json'
 force = (not previous_manifest.exists()
-         or json.loads(previous_manifest.read_text()) != image_config)
+         or json.loads(previous_manifest.read_text(encoding='utf-8')) != analysis_inputs)
 disassembler = ScraplandDisassembler(str(xbe), analysis_json=str(analysis_json),
-    output_dir=str(base / 'disasm'), verbose=True, seed_functions=seed_addresses, force=force)
+    output_dir=str(base / 'disasm'), verbose=True, seed_functions=seed_addresses,
+    observed_seeds=observed_addresses, force=force)
 if not disassembler.run():
     raise SystemExit('Disassembly failed')
 # The donor OutputWriter lists every executable-flagged section, including
@@ -62,4 +65,4 @@ for module, args in [
 ]:
     subprocess.run(['rtk', 'proxy', sys.executable, '-B', '-m', module, str(xbe), *map(str, args)],
                    cwd=RUNTIME, env=env, check=True)
-(base / 'input-manifest.json').write_text(json.dumps(image_config, indent=2) + '\n')
+(base / 'input-manifest.json').write_text(json.dumps(analysis_inputs, indent=2) + '\n', encoding='utf-8')

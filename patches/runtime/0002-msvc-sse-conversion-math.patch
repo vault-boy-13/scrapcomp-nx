@@ -1,0 +1,17 @@
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -526,10 +526,14 @@
+  * outside int32 give the integer indefinite 0x80000000, as on x86. */
+ static inline int32_t recomp_cvt_si(double x, int round_nearest)
+ {
++#ifdef _MSC_VER
++    x = round_nearest ? rint(x) : trunc(x);
++#else
+     if (round_nearest)
+         x = __builtin_rint(x);
+     else
+         x = __builtin_trunc(x);
++#endif
+     if (!(x >= -2147483648.0 && x <= 2147483647.0))
+         return (int32_t)0x80000000u;
+     return (int32_t)x;

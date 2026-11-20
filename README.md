@@ -9,7 +9,7 @@ An upcoming unofficial static recompilation of **Scrapland**, bringing the **ori
 The goal is to translate the original Xbox executable's x86 code into C, compile it for ARM64, and run the game through an adapted runtime on Nintendo Switch.
 
 > [!IMPORTANT]
-> **This project is in early development.** There is no playable build yet; Scrapland does not currently boot on Nintendo Switch.
+> **This project is in early development.** There is no playable Nintendo Switch build yet; Scrapland does not currently boot on Nintendo Switch.
 >
 > **No game files are distributed.** Working with the project requires your own lawfully obtained copy of the original Xbox game.
 
@@ -17,8 +17,9 @@ The goal is to translate the original Xbox executable's x86 code into C, compile
 
 - Analysis, recompilation, and PC/Switch build tools are prepared.
 - Initial analysis of the Xbox executable and preliminary C code generation are complete.
+- A native Windows diagnostic `.exe` reaches the menu and a controllable first scene. A repeated ten-minute host scenario passes bounded audio and liveness checks, with observed movement, camera and gameplay after requested resumes. Full-game validation is ongoing; unrecovered guest targets still stop execution when reached. See the [host milestone](docs/HOST_MILESTONE.md).
 - Runtime libraries and standalone test NROs have been built; runtime, OpenGL, and deko3d probes have been checked in Ryubing.
-- Game boot, game rendering, and operation on a physical Nintendo Switch still need to be implemented and verified.
+- Playable game startup, rendering, and operation on a physical Nintendo Switch still need to be implemented and verified.
 
 The test NRO results validate individual parts of the development environment. They do not establish that the game works or demonstrate its performance on a console.
 
@@ -56,7 +57,7 @@ The project is intended for research and compatibility with your own lawfully ob
 Цель проекта — преобразовать x86-код оригинальной Xbox-версии в C, скомпилировать его для ARM64 и обеспечить работу игры через адаптированный runtime на Nintendo Switch.
 
 > [!IMPORTANT]
-> **Проект находится на ранней стадии разработки.** Готовой игровой сборки пока нет; Scrapland ещё не запускается на Nintendo Switch.
+> **Проект находится на ранней стадии разработки.** Готовой игровой сборки для Nintendo Switch пока нет; Scrapland ещё не запускается на Nintendo Switch.
 >
 > **Игровые файлы не распространяются.** Для работы с проектом необходима собственная законно полученная копия оригинальной Xbox-версии игры.
 
@@ -64,8 +65,9 @@ The project is intended for research and compatibility with your own lawfully ob
 
 - Подготовлены инструменты анализа, рекомпиляции и сборки для PC и Switch.
 - Выполнены первоначальный анализ Xbox executable и предварительная генерация C-кода.
+- Нативный диагностический Windows `.exe` доходит до меню и управляемой первой сцены. Повторный десятиминутный сценарий проходит ограниченные проверки звука и непрерывности работы; подтверждены движение, камера и игровая сцена после запросов возврата из паузы. Проверка всей игры продолжается; при достижении невосстановленных гостевых переходов исполнение по-прежнему останавливается. См. [результаты этапа на ПК](docs/HOST_MILESTONE.md).
 - Собраны runtime-библиотеки и отдельные тестовые NRO; runtime, OpenGL и deko3d проверены в Ryubing.
-- Запуск игры, игровой рендеринг и работоспособность на физической Nintendo Switch ещё предстоит реализовать и проверить.
+- Полноценный игровой запуск, рендеринг и работоспособность на физической Nintendo Switch ещё предстоит реализовать и проверить.
 
 Результаты тестовых NRO подтверждают готовность отдельных компонентов окружения. Они не подтверждают работоспособность самой игры или её производительность на консоли.
 

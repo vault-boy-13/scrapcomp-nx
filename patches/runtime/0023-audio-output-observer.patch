@@ -1,0 +1,61 @@
+--- a/src/apu/apu_xaudio2.c
++++ b/src/apu/apu_xaudio2.c
+@@ -18,6 +18,9 @@
+  * spike (a mixdown summing many bins, a decoder glitch) is capped without the
+  * harsh edge of hard clipping. */
+ static float g_xa2_volume = 0.5f;
++static Xa2Observer s_observer;
++
++void xa2_set_observer(Xa2Observer observer) { s_observer = observer; }
+ 
+ void apu_output_safety(const int16_t *in, int16_t *out, int n)
+ {
+@@ -162,6 +165,7 @@
+     IXAudio2SourceVoice_GetState(g_xa2_source, &state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+     if ((int)state.BuffersQueued >= XA2_NUM_BUFS) {
+         g_xa2_stats.dropped++;
++        if (s_observer) s_observer(samples, NULL, 0, (int)state.BuffersQueued, &g_xa2_stats);
+         return 0;
+     }
+     {
+@@ -201,6 +205,8 @@
+     g_xa2_next_buf = (idx + 1) % XA2_NUM_BUFS;
+     g_xa2_frames_written++;
+     g_xa2_stats.submitted++;
++    if (s_observer) s_observer(samples, &g_xa2_bufs[idx][0][0], copy_samples,
++                               (int)state.BuffersQueued, &g_xa2_stats);
+     return 1;
+ }
+ 
+@@ -416,6 +422,7 @@
+     queued = xa2_queued();
+     if (queued >= g_sdla_target * 4) {
+         g_sdla_stats.dropped++;
++        if (s_observer) s_observer(samples, NULL, 0, queued, &g_sdla_stats);
+         return 0;
+     }
+     if (queued == 0 && g_sdla_stats.submitted) {
+@@ -438,6 +445,7 @@
+         return 0;
+     g_sdla_frames_written++;
+     g_sdla_stats.submitted++;
++    if (s_observer) s_observer(samples, buf, num_samples, queued, &g_sdla_stats);
+     return 1;
+ }
+ 
+--- a/src/apu/apu_xaudio2.h
++++ b/src/apu/apu_xaudio2.h
+@@ -37,6 +37,13 @@
+ } Xa2Stats;
+ void xa2_get_stats(Xa2Stats *out);
+ 
++/* Optional synchronous observation; install before starting the APU thread.
++ * Buffers are read-only and valid only during the call. frames=0/output=NULL
++ * reports a dropped block. This does not replace or modify host submission. */
++typedef void (*Xa2Observer)(const int16_t *input, const int16_t *output,
++                           int frames, int queued_before, const Xa2Stats *stats);
++void xa2_set_observer(Xa2Observer observer);
++
+ /* Master volume, 0.0 .. 1.0 (default 0.5), applied to every sample before
+  * output, followed by a limiter that keeps the signal below -6 dBFS: nothing
+  * the guest or the mixers produce can reach full scale in a headset. */

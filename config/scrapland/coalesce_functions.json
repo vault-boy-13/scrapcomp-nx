@@ -1,0 +1,480 @@
+[
+  {
+    "start": "0x0001B900",
+    "end": "0x0001B97E",
+    "coalesce_starts": [
+      "0x0001B937"
+    ]
+  },
+  {
+    "start": "0x00028A90",
+    "end": "0x00028AE8",
+    "coalesce_starts": [
+      "0x00028AC1"
+    ]
+  },
+  {
+    "start": "0x00028AF0",
+    "end": "0x00028B3D",
+    "coalesce_starts": [
+      "0x00028B11"
+    ]
+  },
+  {
+    "start": "0x00028B40",
+    "end": "0x00028B87",
+    "coalesce_starts": [
+      "0x00028B61"
+    ]
+  },
+  {
+    "start": "0x00028B90",
+    "end": "0x00028BDE",
+    "coalesce_starts": [
+      "0x00028BB2"
+    ]
+  },
+  {
+    "start": "0x00028BE0",
+    "end": "0x00028C77",
+    "coalesce_starts": [
+      "0x00028C15"
+    ]
+  },
+  {
+    "start": "0x00028C80",
+    "end": "0x00028CEC",
+    "coalesce_starts": [
+      "0x00028CB1"
+    ]
+  },
+  {
+    "start": "0x00028CF0",
+    "end": "0x00028DA6",
+    "coalesce_starts": [
+      "0x00028D21"
+    ]
+  },
+  {
+    "start": "0x00028F00",
+    "end": "0x00028FBB",
+    "coalesce_starts": [
+      "0x00028F4D",
+      "0x00028F74"
+    ]
+  },
+  {
+    "start": "0x00028FD0",
+    "end": "0x0002900B",
+    "coalesce_starts": [
+      "0x00028FF4"
+    ]
+  },
+  {
+    "start": "0x00029050",
+    "end": "0x000290E9",
+    "coalesce_starts": [
+      "0x000290BA"
+    ]
+  },
+  {
+    "start": "0x0002AD10",
+    "end": "0x0002AEC4",
+    "coalesce_starts": [
+      "0x0002AD44"
+    ]
+  },
+  {
+    "start": "0x0002AF70",
+    "end": "0x0002B1FF",
+    "coalesce_starts": [
+      "0x0002B01B",
+      "0x0002B18D",
+      "0x0002B193",
+      "0x0002B1A9",
+      "0x0002B1AF",
+      "0x0002B1D1",
+      "0x0002B1F2"
+    ],
+    "local_aliases": [
+      "0x0002B193",
+      "0x0002B1AF"
+    ]
+  },
+  {
+    "start": "0x0002B470",
+    "end": "0x0002B564",
+    "coalesce_starts": [
+      "0x0002B498",
+      "0x0002B4D3",
+      "0x0002B4EE",
+      "0x0002B4F4",
+      "0x0002B50E",
+      "0x0002B520"
+    ],
+    "local_aliases": [
+      "0x0002B4D3",
+      "0x0002B4F4"
+    ]
+  },
+  {
+    "start": "0x0002B570",
+    "end": "0x0002B676",
+    "coalesce_starts": [
+      "0x0002B5A4",
+      "0x0002B5E0",
+      "0x0002B5FB",
+      "0x0002B601",
+      "0x0002B61B",
+      "0x0002B62D"
+    ],
+    "local_aliases": [
+      "0x0002B5E0",
+      "0x0002B601"
+    ]
+  },
+  {
+    "start": "0x0002B970",
+    "end": "0x0002BB22",
+    "coalesce_starts": [
+      "0x0002BA20",
+      "0x0002BA26",
+      "0x0002BA3C",
+      "0x0002BA42",
+      "0x0002BA5E"
+    ],
+    "local_aliases": [
+      "0x0002BA26",
+      "0x0002BA42"
+    ]
+  },
+  {
+    "start": "0x00033060",
+    "end": "0x000334A0",
+    "coalesce_starts": [
+      "0x00033090",
+      "0x000330A6",
+      "0x000330D2",
+      "0x000330E8",
+      "0x0003314E",
+      "0x00033189",
+      "0x000331D4",
+      "0x0003320F",
+      "0x0003324C",
+      "0x0003327E",
+      "0x000332A2",
+      "0x000332B8",
+      "0x000332F0",
+      "0x00033306",
+      "0x0003333E",
+      "0x00033354",
+      "0x0003338C",
+      "0x000333A2",
+      "0x000333DA",
+      "0x000333F0",
+      "0x00033425",
+      "0x0003343B",
+      "0x0003348B"
+    ],
+    "local_aliases": [
+      "0x0003327E",
+      "0x0003348B"
+    ]
+  },
+  {
+    "start": "0x000338C0",
+    "end": "0x000339FB",
+    "coalesce_starts": [
+      "0x0003396C"
+    ]
+  },
+  {
+    "start": "0x000339FB",
+    "end": "0x00033BCB",
+    "coalesce_starts": [
+      "0x00033A99",
+      "0x00033ABE",
+      "0x00033B10"
+    ]
+  },
+  {
+    "start": "0x00094DE0",
+    "end": "0x00095113",
+    "coalesce_starts": [
+      "0x0009506F"
+    ]
+  },
+  {
+    "start": "0x000A7DF0",
+    "end": "0x000A7EAD",
+    "coalesce_starts": [
+      "0x000A7E5D",
+      "0x000A7E63",
+      "0x000A7E85",
+      "0x000A7E8B"
+    ],
+    "local_aliases": [
+      "0x000A7E63",
+      "0x000A7E8B"
+    ]
+  },
+  {
+    "start": "0x000A8CF0",
+    "end": "0x000A8D5E",
+    "coalesce_starts": [
+      "0x000A8D20",
+      "0x000A8D26"
+    ],
+    "local_aliases": [
+      "0x000A8D26"
+    ]
+  },
+  {
+    "start": "0x000A8D60",
+    "end": "0x000A8DCE",
+    "coalesce_starts": [
+      "0x000A8D90",
+      "0x000A8D96"
+    ],
+    "local_aliases": [
+      "0x000A8D96"
+    ]
+  },
+  {
+    "start": "0x000BA620",
+    "end": "0x000BA753",
+    "coalesce_starts": [
+      "0x000BA657",
+      "0x000BA66D",
+      "0x000BA6A5",
+      "0x000BA6BB"
+    ]
+  },
+  {
+    "start": "0x000BEDF0",
+    "end": "0x000BF858",
+    "coalesce_starts": [
+      "0x000BEE4A",
+      "0x000BEE50",
+      "0x000BEE67",
+      "0x000BEE6D",
+      "0x000BEE85",
+      "0x000BEE8B",
+      "0x000BEEA1",
+      "0x000BEEA7",
+      "0x000BEEBF",
+      "0x000BEED5",
+      "0x000BEF0A",
+      "0x000BEF20",
+      "0x000BEF47",
+      "0x000BEF5C",
+      "0x000BEF83",
+      "0x000BEF99",
+      "0x000BEFC0",
+      "0x000BEFD6",
+      "0x000BEFFD",
+      "0x000BF013",
+      "0x000BF03A",
+      "0x000BF050",
+      "0x000BF077",
+      "0x000BF08D",
+      "0x000BF0B4",
+      "0x000BF0CA",
+      "0x000BF0F1",
+      "0x000BF107",
+      "0x000BF12E",
+      "0x000BF148",
+      "0x000BF170",
+      "0x000BF176",
+      "0x000BF190",
+      "0x000BF196",
+      "0x000BF1AF",
+      "0x000BF1C4",
+      "0x000BF240",
+      "0x000BF246",
+      "0x000BF25C",
+      "0x000BF262",
+      "0x000BF28A",
+      "0x000BF2A0",
+      "0x000BF2F2",
+      "0x000BF308",
+      "0x000BF349",
+      "0x000BF35F",
+      "0x000BF361",
+      "0x000BF379",
+      "0x000BF38F",
+      "0x000BF3D3",
+      "0x000BF3E9",
+      "0x000BF413",
+      "0x000BF428",
+      "0x000BF645",
+      "0x000BF65B",
+      "0x000BF6B3",
+      "0x000BF6C9",
+      "0x000BF6FB",
+      "0x000BF711",
+      "0x000BF73F",
+      "0x000BF755",
+      "0x000BF783",
+      "0x000BF799",
+      "0x000BF7BC",
+      "0x000BF7D2"
+    ],
+    "local_aliases": [
+      "0x000BEE50",
+      "0x000BEE6D",
+      "0x000BEE8B",
+      "0x000BEEA7",
+      "0x000BF176",
+      "0x000BF196",
+      "0x000BF246",
+      "0x000BF262",
+      "0x000BF361"
+    ]
+  },
+  {
+    "start": "0x000EA4B0",
+    "end": "0x000EB510",
+    "coalesce_starts": [
+      "0x000EA997",
+      "0x000EA9DE",
+      "0x000EAA39",
+      "0x000EAA80",
+      "0x000EAABA",
+      "0x000EAB17",
+      "0x000EAB6C",
+      "0x000EABC7",
+      "0x000EAC03",
+      "0x000EAC32",
+      "0x000EAC6C",
+      "0x000EAC74",
+      "0x000EAC75"
+    ],
+    "local_aliases": [
+      "0x000EA9DE",
+      "0x000EAA80",
+      "0x000EAB6C",
+      "0x000EAC03",
+      "0x000EAC6C",
+      "0x000EAC74",
+      "0x000EAC75"
+    ]
+  },
+  {
+    "start": "0x000F8B50",
+    "end": "0x000F92EA",
+    "coalesce_starts": [
+      "0x000F8BF8",
+      "0x000F8C32",
+      "0x000F8C68",
+      "0x000F8C9E",
+      "0x000F8EA7",
+      "0x000F8F25",
+      "0x000F9037",
+      "0x000F9129",
+      "0x000F91BA",
+      "0x000F928F"
+    ]
+  },
+  {
+    "start": "0x000F94A0",
+    "end": "0x000F9583",
+    "coalesce_starts": [
+      "0x000F94C9",
+      "0x000F94DF",
+      "0x000F9530",
+      "0x000F9546"
+    ]
+  },
+  {
+    "start": "0x000FB320",
+    "end": "0x000FB925",
+    "coalesce_starts": [
+      "0x000FB475",
+      "0x000FB48A",
+      "0x000FB4B3",
+      "0x000FB4C9",
+      "0x000FB718",
+      "0x000FB72B",
+      "0x000FB77A",
+      "0x000FB7AE",
+      "0x000FB7E8",
+      "0x000FB7FA",
+      "0x000FB827",
+      "0x000FB839"
+    ],
+    "local_aliases": [
+      "0x000FB77A"
+    ]
+  },
+  {
+    "start": "0xfc0c0",
+    "end": "0xfcaf8",
+    "coalesce_starts": [
+      "0xfc47f",
+      "0xfc6c2"
+    ],
+    "retained_entries": [
+      "0x000FC6C2"
+    ]
+  },
+  {
+    "start": "0x00105900",
+    "end": "0x00105BE6",
+    "coalesce_starts": [
+      "0x00105B40",
+      "0x00105B56"
+    ]
+  },
+  {
+    "start": "0x001221A0",
+    "end": "0x00122C7B",
+    "coalesce_starts": [
+      "0x00122C40"
+    ],
+    "retained_entries": [
+      "0x00122C40"
+    ]
+  },
+  {
+    "start": "0x00143CF0",
+    "end": "0x00143E3B",
+    "coalesce_starts": [
+      "0x00143D7A",
+      "0x00143D7F",
+      "0x00143DEB",
+      "0x00143E26"
+    ],
+    "local_aliases": [
+      "0x00143D7F",
+      "0x00143E26"
+    ]
+  },
+  {
+    "start": "0x0017BA30",
+    "end": "0x0017BD6D",
+    "coalesce_starts": []
+  },
+  {
+    "start": "0x00215330",
+    "end": "0x00215E8C",
+    "coalesce_starts": [
+      "0x00215D26",
+      "0x00215D28",
+      "0x00215D50",
+      "0x00215D52",
+      "0x00215D7B",
+      "0x00215D7D",
+      "0x00215DA6",
+      "0x00215DA8",
+      "0x00215E74"
+    ],
+    "local_aliases": [
+      "0x00215D28",
+      "0x00215D52",
+      "0x00215D7D",
+      "0x00215DA8",
+      "0x00215E74"
+    ]
+  }
+]

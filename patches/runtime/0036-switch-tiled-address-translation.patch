@@ -1,0 +1,25 @@
+diff --git a/templates/runtime/recomp_types.h b/templates/runtime/recomp_types.h
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -482,7 +482,21 @@
+  * uintptr_t cast preserves the overflow bits, landing us 4GB+ past
+  * our mapping and causing access violations.
+  */
++#if defined(__SWITCH__)
++static inline uintptr_t recomp_xbox_ptr(uint32_t va)
++{
++    /* Homebrew loaders need not offer a second view of mapped pages.
++     * The 64 MB tiled NV2A window and the contiguous arena are the same
++     * backing in this runtime. Normalize before any load, store or bulk
++     * copy, including accesses from sections without MMIO rewriting. */
++    if (va - 0xF0000000u < 0x04000000u)
++        va -= 0x70000000u;
++    return (uintptr_t)va + g_xbox_mem_offset;
++}
++#define XBOX_PTR(addr) recomp_xbox_ptr((uint32_t)(addr))
++#else
+ #define XBOX_PTR(addr) ((uintptr_t)(uint32_t)(addr) + g_xbox_mem_offset)
++#endif
+ 
+ /* Guest RAM accesses are volatile by default: a poll loop that re-reads a
+  * flag another thread (or the runtime) writes must not have its load hoisted.

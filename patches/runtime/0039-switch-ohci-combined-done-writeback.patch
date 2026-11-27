@@ -1,0 +1,19 @@
+diff --git a/src/usb/ohci.c b/src/usb/ohci.c
+--- a/src/usb/ohci.c
++++ b/src/usb/ohci.c
+@@ -832,8 +832,15 @@ static void ohci_publish_done(OhciController *hc, uint32_t done_head)
+         if (t)
+             wr32(t + 8, held);
+     }
+     hc->reg[HcDoneHead / 4] = done_head;
++#if !defined(__SWITCH__)
+     ohci_flush_done(hc);
++#endif
++    /* On Switch, publish at the end of the controller tick. If a periodic
++     * completion already owned HCCA, retiring the control request afterward
++     * could leave its completion hidden while the guest processed SOF and
++     * cancelled the request. The combined list reaches the guest before that
++     * cancellation path can see the advanced endpoint head. */
+ }
+ 
+ static int ohci_run_control_list(OhciController *hc)

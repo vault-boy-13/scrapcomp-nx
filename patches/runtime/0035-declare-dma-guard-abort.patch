@@ -1,0 +1,8 @@
+diff --git a/src/kernel/xbox_devbus.c b/src/kernel/xbox_devbus.c
+--- a/src/kernel/xbox_devbus.c
++++ b/src/kernel/xbox_devbus.c
+@@ -10,3 +10,4 @@
+  */
+ 
++#include <stdlib.h>
+ #include "kernel.h"

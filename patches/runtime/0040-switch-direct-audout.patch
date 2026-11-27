@@ -1,0 +1,288 @@
+diff --git a/src/apu/apu_xaudio2.c b/src/apu/apu_xaudio2.c
+--- a/src/apu/apu_xaudio2.c
++++ b/src/apu/apu_xaudio2.c
+@@ -35,8 +35,8 @@
+     g_xa2_volume = v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
+ }
+ 
+-/* The XAudio2 backend is Windows-only; on other hosts the same xa2_* calls
+- * are served by SDL2 audio (below). */
++/* The xa2_* interface uses XAudio2 on Windows and the PCM backends below
++ * on other platforms. */
+ #if defined(_WIN32)
+ 
+ #define COBJMACROS
+@@ -245,18 +245,12 @@
+     g_xa2_stats.peak = 0;
+ }
+ 
+-#else /* !_WIN32 -- SDL2 audio (Linux, Nintendo Switch) */
+-
+-/* The same contract as the XAudio2 path: the APU frame thread submits one
+- * 256-sample block per 8 EP frames and paces itself by xa2_queued(), so the
+- * output device's clock drains the queue and drives the APU clock (and with
+- * it DirectSound's play cursor, which paces the title's movies).
+- *
+- * SDL_QueueAudio, not a callback: the frame thread already produces blocks
+- * at the device's rate, and a callback would need a second ring and lock.
+- * SDL copies each block into its own queue, so the samples never go to the
+- * sound service from guest memory (on Horizon the audren driver copies from
+- * SDL's mix buffer into its own pool).
++#else /* !_WIN32 -- SDL2 or Horizon PCM output */
++
++/* The frame thread produces one 256-sample block per eight EP frames.
++ * Linux queues it through SDL. Horizon copies it into an audout buffer
++ * that stays owned by the service until released. The APU runs on its
++ * own clock and can keep progressing if the device queue fills.
+  *
+  * RECOMP_AUDIO=0 keeps the host device closed; the APU then paces by wall
+  * clock as before. RECOMP_AUDIO_BLOCKS sets the queue depth the frame thread
+@@ -264,7 +258,12 @@
+  * threads time-slice in 10 ms quanta). RECOMP_AUDIO_VOLUME = 0..100. */
+ 
+ #include <stdlib.h>
++#ifdef __SWITCH__
++#include <malloc.h>
++#include <switch.h>
++#else
+ #include <SDL.h>
++#endif
+ 
+ #define SDLA_SAMPLE_RATE   48000
+ #define SDLA_CHANNELS      2
+@@ -277,19 +276,96 @@
+ #define SDLA_DEFAULT_BLOCKS 8
+ #endif
+ 
++#ifdef __SWITCH__
++enum { AUDOUT_SLOTS = 16, AUDOUT_PAGE_BYTES = 0x1000 };
++static AudioOutBuffer g_audout_buffers[AUDOUT_SLOTS];
++static unsigned char *g_audout_memory;
++static int g_audout_head;
++static int g_audout_pending;
++static u64 g_audout_poll_at;
++static bool g_audout_error_logged;
++#else
+ static SDL_AudioDeviceID g_sdla_dev = 0;
++#endif
+ static int               g_sdla_target = SDLA_DEFAULT_BLOCKS;
+ static int               g_sdla_frames_written = 0;
+ static Xa2Stats          g_sdla_stats;
+ 
+ static void dump_init(void);
+ 
++#ifdef __SWITCH__
++static void audout_error(const char *operation, Result rc)
++{
++    if (g_audout_error_logged) return;
++    g_audout_error_logged = true;
++    fprintf(stderr, "[AUDIO] audout %s failed: 0x%x\n", operation, rc);
++}
++
++static int open_audout(void)
++{
++    Result rc = audoutInitialize();
++    if (R_FAILED(rc)) {
++        audout_error("initialize", rc);
++        return 0;
++    }
++    if (audoutGetSampleRate() != SDLA_SAMPLE_RATE ||
++        audoutGetChannelCount() != SDLA_CHANNELS ||
++        audoutGetPcmFormat() != PcmFormat_Int16) {
++        fprintf(stderr, "[AUDIO] Unexpected audout format\n");
++        audoutExit();
++        return 0;
++    }
++    unsigned char *memory = memalign(AUDOUT_PAGE_BYTES, AUDOUT_SLOTS * AUDOUT_PAGE_BYTES);
++    if (!memory) {
++        fprintf(stderr, "[AUDIO] could not allocate the audout buffer pool\n");
++        audoutExit();
++        return 0;
++    }
++    rc = audoutStartAudioOut();
++    if (R_FAILED(rc)) {
++        audout_error("start", rc);
++        audoutExit();
++        free(memory);
++        return 0;
++    }
++    g_audout_memory = memory;
++    g_audout_head = g_audout_pending = 0;
++    g_audout_poll_at = 0;
++    for (int i = 0; i < AUDOUT_SLOTS; ++i) {
++        g_audout_buffers[i] = (AudioOutBuffer){
++            .buffer = memory + i * AUDOUT_PAGE_BYTES,
++            .buffer_size = AUDOUT_PAGE_BYTES,
++        };
++    }
++    fprintf(stderr, "[AUDIO] audout: %d Hz, %d ch, queue %d x %d samples\n",
++            SDLA_SAMPLE_RATE, SDLA_CHANNELS, g_sdla_target, SDLA_BLOCK_SAMPLES);
++    return 1;
++}
++
++static int submit_audout(const int16_t *samples, size_t bytes)
++{
++    AudioOutBuffer *buffer = &g_audout_buffers[(g_audout_head + g_audout_pending) % AUDOUT_SLOTS];
++    memcpy(buffer->buffer, samples, bytes);
++    buffer->data_size = bytes;
++    armDCacheFlush(buffer->buffer, bytes);
++    Result rc = audoutAppendAudioOutBuffer(buffer);
++    if (R_FAILED(rc)) {
++        audout_error("append", rc);
++        return 0;
++    }
++    ++g_audout_pending;
++    return 1;
++}
++#endif
++
+ int xa2_init(void)
+ {
++#ifndef __SWITCH__
+     SDL_AudioSpec want, have;
++#endif
+     const char *e;
+ 
+-    if (g_sdla_dev) return 1;
++    if (xa2_is_active()) return 1;
+ 
+     e = getenv("RECOMP_AUDIO");
+     if (e && strcmp(e, "0") == 0) {
+@@ -301,6 +377,11 @@
+     e = getenv("RECOMP_AUDIO_VOLUME");
+     if (e) xa2_set_master_volume((float)atoi(e) / 100.0f);
+ 
++#ifdef __SWITCH__
++    if (g_sdla_target >= AUDOUT_SLOTS) g_sdla_target = AUDOUT_SLOTS - 1;
++    g_audout_error_logged = false;
++    if (!open_audout()) return 0;
++#else
+     if (!SDL_WasInit(SDL_INIT_AUDIO) && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+         fprintf(stderr, "[AUDIO] SDL audio init failed: %s\n", SDL_GetError());
+         return 0;
+@@ -321,23 +402,30 @@
+         return 0;
+     }
+     SDL_PauseAudioDevice(g_sdla_dev, 0);
+-    dump_init();
+-
+-    g_sdla_frames_written = 0;
+     fprintf(stderr, "[AUDIO] SDL %s output: %d Hz, %d ch, %d-sample device buffer,"
+                     " queue %d x %d samples\n",
+             SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?",
+             have.freq, have.channels, have.samples,
+             g_sdla_target, SDLA_BLOCK_SAMPLES);
++#endif
++    dump_init();
++    g_sdla_frames_written = 0;
+     return 1;
+ }
+ 
+ void xa2_shutdown(void)
+ {
+-    if (!g_sdla_dev) return;
++    if (!xa2_is_active()) return;
++#ifdef __SWITCH__
++    audoutStopAudioOut();
++    audoutExit();
++    free(g_audout_memory);
++    g_audout_memory = NULL;
++#else
+     SDL_CloseAudioDevice(g_sdla_dev);
+     g_sdla_dev = 0;
+     SDL_QuitSubSystem(SDL_INIT_AUDIO);
++#endif
+     fprintf(stderr, "[AUDIO] shut down (%d blocks written, %llu underruns,"
+                     " %llu dropped)\n", g_sdla_frames_written,
+             (unsigned long long)g_sdla_stats.underruns,
+@@ -346,13 +434,44 @@
+ 
+ int xa2_is_active(void)
+ {
++#ifdef __SWITCH__
++    return g_audout_memory != NULL;
++#else
+     return g_sdla_dev != 0;
++#endif
+ }
+ 
+ int xa2_queued(void)
+ {
++#ifdef __SWITCH__
++    if (!g_audout_memory) return 0;
++    if (g_audout_pending && armGetSystemTick() >= g_audout_poll_at) {
++        g_audout_poll_at = armGetSystemTick() + armNsToTicks(4000000);
++        while (g_audout_pending) {
++            AudioOutBuffer *released = NULL;
++            u32 count = 0;
++            Result rc = audoutGetReleasedAudioOutBuffer(&released, &count);
++            if (R_FAILED(rc)) {
++                audout_error("get released buffer", rc);
++                break;
++            }
++            if (!count) break;
++            if (count != 1 || released != &g_audout_buffers[g_audout_head]) {
++                if (!g_audout_error_logged) {
++                    g_audout_error_logged = true;
++                    fprintf(stderr, "[AUDIO] audout released an unexpected buffer\n");
++                }
++                break;
++            }
++            g_audout_head = (g_audout_head + 1) % AUDOUT_SLOTS;
++            --g_audout_pending;
++        }
++    }
++    return g_audout_pending;
++#else
+     if (!g_sdla_dev) return 0;
+     return (int)(SDL_GetQueuedAudioSize(g_sdla_dev) / SDLA_BLOCK_BYTES);
++#endif
+ }
+ 
+ int xa2_queue_target(void)
+@@ -425,13 +544,18 @@
+     int16_t buf[SDLA_MAX_SAMPLES * SDLA_CHANNELS];
+     int i, n, queued;
+ 
+-    if (!g_sdla_dev) return 0;
++    if (!xa2_is_active()) return 0;
+     if (num_samples > SDLA_MAX_SAMPLES) num_samples = SDLA_MAX_SAMPLES;
+ 
+     /* A device that stopped draining (a suspended applet) must not grow the
+      * queue without bound; the frame thread stops waiting on it too. */
+     queued = xa2_queued();
+-    if (queued >= g_sdla_target * 4) {
++#ifdef __SWITCH__
++    int capacity = AUDOUT_SLOTS;
++#else
++    int capacity = g_sdla_target * 4;
++#endif
++    if (queued >= capacity) {
+         g_sdla_stats.dropped++;
+         if (s_observer) s_observer(samples, NULL, 0, queued, &g_sdla_stats);
+         return 0;
+@@ -448,12 +572,19 @@
+         if (a >= 32767) g_sdla_stats.clipped++;
+         if (a > g_sdla_stats.peak) g_sdla_stats.peak = a;
+     }
++    apu_output_safety(samples, buf, n);
++#ifdef __SWITCH__
++    if (!submit_audout(buf, n * sizeof(int16_t)))
++#else
++    if (SDL_QueueAudio(g_sdla_dev, buf, (Uint32)(n * sizeof(int16_t))) != 0)
++#endif
++    {
++        g_sdla_stats.dropped++;
++        if (s_observer) s_observer(samples, NULL, 0, queued, &g_sdla_stats);
++        return 0;
++    }
++    dump_block(buf, num_samples);
+     g_sdla_stats.samples += (uint64_t)num_samples;
+-    apu_output_safety(samples, buf, n);
+-    dump_block(buf, num_samples);
+-
+-    if (SDL_QueueAudio(g_sdla_dev, buf, (Uint32)(n * sizeof(int16_t))) != 0)
+-        return 0;
+     g_sdla_frames_written++;
+     g_sdla_stats.submitted++;
+     if (s_observer) s_observer(samples, buf, num_samples, queued, &g_sdla_stats);

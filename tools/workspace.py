@@ -131,12 +131,16 @@ def prepare():
     materialize('BLACK-NX-PORT', 'XboxXBE-Recomp', ROOT / '.deps/XboxXBE-Recomp')
     materialize('BLACK-NX-PORT', 'third_party/tomlplusplus', ROOT / '.deps/tomlplusplus')
     for category, source in [('hle-tools', ROOT / '.deps/XboxXBE-Recomp'), ('runtime', RUNTIME)]:
+        # git apply skips paths outside its working subdirectory, even with
+        # --check. Use the repository root and explicitly prefix patch paths.
+        directory = f'--directory={source.relative_to(ROOT).as_posix()}'
         for patch in sorted((ROOT / 'patches' / category).glob('*.patch')):
-            already = subprocess.run(['rtk', 'proxy', 'git', '-C', str(source), 'apply', '--reverse', '--check', str(patch)],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            already = subprocess.run(
+                ['rtk', 'proxy', 'git', 'apply', directory, '--reverse', '--check', str(patch)],
+                cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if already.returncode:
-                run(['git', '-C', source, 'apply', '--check', patch], name=category + '-check-' + patch.stem)
-                run(['git', '-C', source, 'apply', patch], name=category + '-apply-' + patch.stem)
+                run(['git', 'apply', directory, '--check', patch], name=category + '-check-' + patch.stem)
+                run(['git', 'apply', directory, patch], name=category + '-apply-' + patch.stem)
     for relative in ['src/game', 'src/platform/host', 'src/platform/switch', 'src/gpu/common',
                      'src/gpu/gl', 'src/gpu/deko3d', 'patches/runtime', 'runs', 'artifacts']:
         (ROOT / relative).mkdir(parents=True, exist_ok=True)
@@ -227,12 +231,17 @@ def build_switch():
          ROOT / 'tools/build-switch.sh'], name='switch-build')
 
 
+def build_game_switch():
+    from game_switch import build
+    build()
+
+
 def stage():
     build = ROOT / 'build/switch-workspace'
     destination = ROOT / 'switch_sd/switch/scrapland-workspace'
     destination.mkdir(parents=True, exist_ok=True)
     files = []
-    for stem in ['runtime_probe', 'deko_probe', 'gl_probe']:
+    for stem in ['runtime_probe', 'deko_probe', 'gl_probe', 'deko_game_frame']:
         for extension in ['nro', 'elf', 'map']:
             source = build / (stem + '.' + extension)
             if not source.exists():
@@ -242,7 +251,7 @@ def stage():
     sources = [ROOT / 'CMakeLists.txt', ROOT / 'cmake/switch-toolchain.cmake', ROOT / 'tools/build-switch.sh']
     sources += [p for p in (ROOT / 'probes').rglob('*') if p.is_file()]
     manifest = {
-        'purpose': 'Workspace/runtime/GPU probes only; contains no Scrapland code or assets',
+        'purpose': 'Workspace/runtime/GPU probes and captured-frame replay tool',
         'files': files, 'date_utc': datetime.now(timezone.utc).isoformat(),
         'sources': {p.relative_to(ROOT).as_posix(): digest(p) for p in sorted(sources)},
         'dependencies_lock_sha256': digest(ROOT / 'config/dependencies.lock.json'),
@@ -294,7 +303,7 @@ def check():
         run([build / 'xboxrecomp/src/d3d/d3d8_smoke' / (target + '.exe')], name=target, env=env)
 
 
-def emu_prepare():
+def emu_prepare(stage_probes=True):
     source = Path(os.environ['APPDATA']) / 'Ryujinx'
     destination = ROOT / '.cache/ryubing-workspace'
     destination.mkdir(parents=True, exist_ok=True)
@@ -313,12 +322,13 @@ def emu_prepare():
         target = destination / relative
         if not target.exists():
             shutil.copytree(source / relative, target)
-    sd = destination / 'sdcard/switch/scrapland-workspace'
-    sd.mkdir(parents=True, exist_ok=True)
-    staged = ROOT / 'switch_sd/switch/scrapland-workspace'
-    for entry in staged.iterdir():
-        if entry.is_file():
-            shutil.copy2(entry, sd / entry.name)
+    if stage_probes:
+        sd = destination / 'sdcard/switch/scrapland-workspace'
+        sd.mkdir(parents=True, exist_ok=True)
+        staged = ROOT / 'switch_sd/switch/scrapland-workspace'
+        for entry in staged.iterdir():
+            if entry.is_file():
+                shutil.copy2(entry, sd / entry.name)
     print(f'Isolated emulator root: {destination}')
 
 
@@ -365,6 +375,11 @@ def run_game_host():
     raise SystemExit(run(15))
 
 
+def stage_game_emu():
+    from game_switch import stage_emulator
+    stage_emulator()
+
+
 def boot_report():
     from analyze_boot import analyze
     analyze()
@@ -375,7 +390,7 @@ def main():
     parser.add_argument('command', choices=['prepare', 'doctor', 'analyze', 'generate', 'build-host',
                                            'build-switch', 'scan-xdk', 'stage', 'check',
                                            'emu-prepare', 'lock-dependencies', 'boot-report',
-                                           'build-game-host', 'run-game-host'])
+                                           'build-game-host', 'run-game-host', 'build-game-switch', 'stage-game-emu'])
     args = parser.parse_args()
     globals()[args.command.replace('-', '_')]()
 

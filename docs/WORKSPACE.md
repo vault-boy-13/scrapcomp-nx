@@ -73,6 +73,37 @@ Exe находится в `build/host-workspace/scrapcomp_host.exe`, matching sy
 
 Windows execution evidence сохраняется отдельно в локальном `reports/game-host-validation.json`. Старый `workspace-validation.json` относится к окружению и NRO-пробам. Runner запускает процесс с рабочим каталогом внутри `runs/host/<run-id>/`, включая автоматический `xbox_kernel.log`; при ручном запуске из корня этот default log также исключён из Git.
 
+### Игровой NRO в Ryubing
+
+После подготовки runtime и генерации C из проверенного XBE соберите отдельную
+цель ARM64 и запустите её в изолированном профиле.
+
+```powershell
+rtk proxy .venv\Scripts\python.exe -B tools/workspace.py prepare
+rtk proxy .venv\Scripts\python.exe -B tools/workspace.py build-game-switch
+rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-ryubing.ps1 -Probe scrapcomp_switch -ShowWindow -Seconds 80
+```
+
+Сборка создаёт NRO, ELF, карту линковки и манифест в `build/switch-game/`.
+Архив с совпадающими хешами хранится в `artifacts/switch-game/`. Launcher
+проверяет этот архив и копирует диск в виртуальную SD. Каталог
+`sdmc:/switch/scrapcomp-nx/game` содержит копию входных файлов, а отдельный
+`sdmc:/switch/scrapcomp-nx/saves` используется для сохранений.
+
+Можно передать `-GuestDiagnostics <файл>` с параметрами runtime в строках
+`имя=значение`. Для ускорения поиска точки остановки используйте
+`RECOMP_WATCHDOG_SECS=65`. Пример выборочного чтения кадров NV2A и записи
+первых восьми секунд PCM, принятого звуковым выходом.
+
+```text
+RECOMP_GL_DUMP=sdmc:/switch/scrapcomp-nx/diag/frame-,120
+RECOMP_AUDIO_DUMP=sdmc:/switch/scrapcomp-nx/diag/audio.pcm,0,8
+RECOMP_AUDIO_METRICS=1
+```
+
+После ограниченного по времени запуска в `runs/ryubing/<run-id>/` остаются
+логи эмулятора и гостя, манифесты входов и записанные файлы из `diag/`.
+
 ### Каталоги
 
 ```text
@@ -83,11 +114,12 @@ runtime/xboxrecomp/                         рабочий SDK из pinned NFSU2
 .deps/RenderDoc_1.47_64/                    portable RenderDoc
 build/host-workspace/                       Windows tools, probes и runtime .lib
 build/switch-workspace/                     NRO + соответствующие ELF/map, runtime .a
+build/switch-game/                          игровой NRO, ELF/map, manifest
 build/logs/                                подробные логи отдельных команд
 generated/14ecbbcf23613a91/analysis/         disasm, func_id, ABI и HLE scanner output
 generated/14ecbbcf23613a91/c/                предварительный generated C
 generated/14ecbbcf23613a91/lift-report/      unresolved/UNIMPL и сводка lifter
-switch_sd/switch/scrapland-workspace/       комплект трёх probes, ELF/map и manifest
+switch_sd/switch/scrapland-workspace/       комплект probes, ELF/map и manifest
 artifacts/<build-id>/                       архив согласованных артефактов probes
 .cache/ryubing-workspace/                   отдельный профиль эмулятора и виртуальная SD
 runs/ryubing/<run-id>/                      stdout/stderr и manifest запуска
@@ -106,6 +138,13 @@ rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-ryubing.
 rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-ryubing.ps1 -Probe deko_probe -Seconds 20 -ShowWindow
 rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-ryubing.ps1 -Probe gl_probe -ShowWindow -Capture
 ```
+
+Для проверки transfers deko3d можно передать `-Probe deko_game_frame`
+и `-FrameInput <снимок>`. Снимок должен содержать 720×540 пикселей BGRA
+без заголовка. Его можно получить параметром
+`RECOMP_PVIDEO_DUMP=sdmc:/switch/scrapcomp-nx/diag/pvideo-119.argb` в
+диагностической конфигурации игры. После проверки launcher сохраняет
+побайтовый результат и лог deko3d рядом с хешами сборки и входа.
 
 Первый запуск копирует только уже установленные system prerequisites из пользовательского профиля Ryujinx в локальный профиль проекта. Savedata, game profiles и исходная SD не копируются. Рабочие saves/logs/cache располагаются внутри проекта. Значения ключей не печатаются и не попадают в отчёты/пакеты. Исходный emulator executable и пользовательская конфигурация не меняются.
 
@@ -126,7 +165,10 @@ rtk proxy powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-ryubing.
 - Первый XDK scanner pass: 145/238 entries функций базы и 11/12 entries data найдены. Не все записи базы нужны игре; matches ещё требуют ABI/caller проверки.
 - Первый xboxrecomp pass: 12 958 предполагаемых functions в discovery, 12 922 translated, 0 translation failures, около 2 млн строк C. Есть 297 unresolved stubs и список UNIMPL. Нулевое число failed translation не означает корректный или исполняемый порт.
 
-Неподдержанные инструкции могут быть настоящими пробелами, декодированием data или ошибочными границами functions. Generated C пока не собран в игру и не прошёл conformance на ARM64. Следующая задача — разбор entry/CRT/Python boot path, indirect targets, data-in-code и MMIO coverage, затем минимальный игровой host target.
+Числа из первого прохода относятся к начальной разметке XBE. Текущий
+`scrapcomp_switch` собирает lifted C для ARM64 и проходит до управляемой
+сцены в Ryubing. В актуальной строгой сборке 197 неразрешённых переходов
+останавливают выполнение при первом обращении.
 
 Машиночитаемая итоговая сводка сохраняется локально в `reports/workspace-validation.json` и не публикуется. Её можно пересобрать из существующих результатов командой `rtk proxy .venv\Scripts\python.exe tools/summarize_workspace.py`; это проверка наличия доказательств, а не повторный запуск тестов.
 

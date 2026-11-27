@@ -18,8 +18,9 @@ The goal is to translate the original Xbox executable's x86 code into C, compile
 - Analysis, recompilation, and PC/Switch build tools are prepared.
 - Initial analysis of the Xbox executable and preliminary C code generation are complete.
 - A native Windows diagnostic `.exe` reaches the menu and a controllable first scene. A repeated ten-minute host scenario passes bounded audio and liveness checks, with observed movement, camera and gameplay after requested resumes. Full-game validation is ongoing; unrecovered guest targets still stop execution when reached. See the [host milestone](docs/HOST_MILESTONE.md).
-- Runtime libraries and standalone test NROs have been built; runtime, OpenGL, and deko3d probes have been checked in Ryubing.
-- Playable game startup, rendering, and operation on a physical Nintendo Switch still need to be implemented and verified.
+- Runtime, OpenGL, and deko3d environment probes have been checked in Ryubing.
+- An experimental game NRO reached the first 3D scene in Ryubing, with player movement and camera input verified. Gameplay stability and physical Switch operation still need validation.
+- Audio reaches the emulator's output in that scene. Frequent buffer underruns remain.
 
 The test NRO results validate individual parts of the development environment. They do not establish that the game works or demonstrate its performance on a console.
 
@@ -66,8 +67,9 @@ The project is intended for research and compatibility with your own lawfully ob
 - Подготовлены инструменты анализа, рекомпиляции и сборки для PC и Switch.
 - Выполнены первоначальный анализ Xbox executable и предварительная генерация C-кода.
 - Нативный диагностический Windows `.exe` доходит до меню и управляемой первой сцены. Повторный десятиминутный сценарий проходит ограниченные проверки звука и непрерывности работы; подтверждены движение, камера и игровая сцена после запросов возврата из паузы. Проверка всей игры продолжается; при достижении невосстановленных гостевых переходов исполнение по-прежнему останавливается. См. [результаты этапа на ПК](docs/HOST_MILESTONE.md).
-- Собраны runtime-библиотеки и отдельные тестовые NRO; runtime, OpenGL и deko3d проверены в Ryubing.
-- Полноценный игровой запуск, рендеринг и работоспособность на физической Nintendo Switch ещё предстоит реализовать и проверить.
+- В Ryubing проверены отдельные пробы runtime, OpenGL и deko3d.
+- Экспериментальный игровой NRO дошёл в Ryubing до первой 3D-сцены. Проверены движение персонажа и управление камерой. Стабильность игрового процесса и работу на физической Nintendo Switch ещё предстоит проверить.
+- В этой сцене звук поступает на выход эмулятора. Сохраняются частые опустошения звукового буфера.
 
 Результаты тестовых NRO подтверждают готовность отдельных компонентов окружения. Они не подтверждают работоспособность самой игры или её производительность на консоли.
 

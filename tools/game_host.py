@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -38,7 +39,7 @@ def build_inputs(base):
     return result
 
 
-def prepare():
+def prepare(platform='host'):
     image = ws.checked_image()
     lock = json.loads((ROOT / 'config/dependencies.lock.json').read_text())
     actual_patches = {p.relative_to(ROOT).as_posix(): ws.digest(p)
@@ -68,7 +69,7 @@ def prepare():
     # two million lines again; preserve and identify the previous manifest.
     template = ROOT / 'runtime/xboxrecomp/templates/runtime/recomp_types.h'
     header = base / 'c/recomp_types.h'
-    if ws.digest(header) != ws.digest(template):
+    if platform == 'host' and ws.digest(header) != ws.digest(template):
         previous = ws.digest(base / 'codegen-manifest.json')
         backup = base / ('codegen-manifest.before-header-' + previous[:16] + '.json')
         if not backup.exists():
@@ -82,8 +83,24 @@ def prepare():
         }
         ws.write_json(base / 'codegen-manifest.json', manifest)
         print('Refreshed reusable runtime header; generated game C bodies unchanged')
-    strict = base / 'host-strict'
+    strict = base / (platform + '-strict')
     strict.mkdir(parents=True, exist_ok=True)
+    strict_files = ['unresolved.c', 'scrap_image.h']
+    if platform == 'switch':
+        # Keep the original include order and the macros defined by each
+        # generated translation unit. The host retains its generated tree.
+        switch_c = strict / 'c'
+        switch_c.mkdir(exist_ok=True)
+        for name, expected in manifest['files'].items():
+            if name == 'recomp_types.h':
+                continue
+            destination = switch_c / name
+            if not destination.exists() or ws.digest(destination) != expected:
+                shutil.copyfile(base / 'c' / name, destination)
+        switch_header = switch_c / 'recomp_types.h'
+        if not switch_header.exists() or ws.digest(switch_header) != ws.digest(template):
+            switch_header.write_bytes(template.read_bytes())
+        strict_files.extend('c/' + name for name in manifest['files'])
     original = (base / 'c/recomp_stubs_unresolved.c').read_text()
     matches = re.findall(r'void (sub_([0-9A-Fa-f]{8}))\(void\)\s*\{[^{}]*\}', original)
     count = len(re.findall(r'^void sub_', original, re.MULTILINE))
@@ -100,9 +117,9 @@ def prepare():
     ws.write_json(strict / 'manifest.json', {
         'image_sha256': config['sha256'], 'codegen_manifest_sha256': ws.digest(base / 'codegen-manifest.json'),
         'unresolved_count': count, 'policy': 'terminate with guest VA when reached',
-        'files': {n: ws.digest(strict / n) for n in ['unresolved.c', 'scrap_image.h']},
+        'files': {name: ws.digest(strict / name) for name in strict_files},
     })
-    print(f'Strict host preparation: {count} unresolved calls will terminate, not return success')
+    print(f'Strict {platform} preparation: {count} unresolved calls will terminate')
     return base
 
 

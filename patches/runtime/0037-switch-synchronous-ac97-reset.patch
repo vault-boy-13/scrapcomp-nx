@@ -1,0 +1,18 @@
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -534,6 +534,14 @@ void xbox_mmio_write(uint32_t va, uint32_t val, unsigned size)
+         *(volatile uint16_t *)p = (uint16_t)val;
+     else
+         *(volatile uint32_t *)p = val;
++
++#if defined(__SWITCH__)
++    /* Lifted DSOUND reads some RR bits only once before spinning on the
++     * cached result. Complete the reset synchronously for the MMIO write. */
++    if (g_ac97_poll_page &&
++        va - (XBOX_MCPX_BASE + AC97_NABM_OFFSET) < AC97_TRAP_BYTES)
++        ac97_clear_reset_bits_at(g_ac97_poll_page);
++#endif
+ }
+ 
+ /* The same, registered by a game project that knows where its title's

@@ -70,7 +70,12 @@
     "patches/runtime/0031-page-align-large-pool-allocations.patch": "8841902a9569fd850347c56bfb7e3ad183aa0c7a13bf8cb39696f6ffa01840ff",
     "patches/runtime/0032-prime-xaudio2-before-start.patch": "46e7da77894d3b3b3863fa0ba958e4915317b100d4df00cc387427190477c1d7",
     "patches/runtime/0033-per-thread-xbox-identity.patch": "6653d788419301c52c247af9a87656164c7b7bcaf484810d13b4645e14f9bacc",
-    "patches/runtime/0034-separate-host-output-dsp-clock.patch": "93ec9ff676303cd6eb63299120e3bc3fa108a2c9f80c3b26ba801ec8494688d4"
+    "patches/runtime/0034-separate-host-output-dsp-clock.patch": "93ec9ff676303cd6eb63299120e3bc3fa108a2c9f80c3b26ba801ec8494688d4",
+    "patches/runtime/0035-declare-dma-guard-abort.patch": "422900da4c8e6f59421e16d305305ac2d09bb8acbb64ebce34aaf0b4027eda0b",
+    "patches/runtime/0036-switch-tiled-address-translation.patch": "0454b76606c1eeac9daf7ac6dde9131e4cee4e58ec59da9d6420119dfe7e35d3",
+    "patches/runtime/0037-switch-synchronous-ac97-reset.patch": "a6d6430556fe824dafa77607317fc2082346c45515faeed2d1cb3db26631f3cb",
+    "patches/runtime/0039-switch-ohci-combined-done-writeback.patch": "f4d3b0b70213e09182bd2318cafc7c36e6c72ed178b5dad721ae3ed400c7e834",
+    "patches/runtime/0040-switch-direct-audout.patch": "417d145c5d5ac83d33f52c1aa0bab25a8bc147bf73e3af0699170d15c7d89bec"
   },
   "devkit_packages": "devkitA64 r30-1\nlibnx 4.12.0-1\ndeko3d 0.5.0-1\nuam 1.1.0-2\nswitch-mesa 20.1.0-5\nswitch-sdl2 2.28.5-4\nswitch-cmake 1.5.2-1",
   "tool_binaries": {
